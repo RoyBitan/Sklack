@@ -1,0 +1,5 @@
+{
+  "name": "Sklack",
+  "description": "Professional Garage Management System styled with Google Material Design principles. Features role-based access for Admins, Staff, and Clients with real-time job tracking via license plates.",
+  "requestFramePermissions": []
+}
