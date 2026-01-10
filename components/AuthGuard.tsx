@@ -61,7 +61,7 @@ export const AuthGuard: React.FC = () => {
                 if (profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER) {
                     return <ManagerDashboard />;
                 }
-                if (profile.role === UserRole.EMPLOYEE) {
+                if (profile.role === UserRole.TEAM) {
                     return <EmployeeDashboard />;
                 }
                 return <CustomerDashboard />;

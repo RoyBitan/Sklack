@@ -276,7 +276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updateData: any = { status };
 
       // If employee starts task, assign to them
-      if (status === TaskStatus.IN_PROGRESS && profile?.role === UserRole.EMPLOYEE) {
+      if (status === TaskStatus.IN_PROGRESS && profile?.role === UserRole.TEAM) {
         // Fetch current assignment to properly append
         const { data: currentTask } = await supabase.from('tasks').select('assigned_to').eq('id', taskId).single();
         const currentAssigned = currentTask?.assigned_to || [];
@@ -287,7 +287,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Allow workers to "Return" a task (reset status to WAITING and unassign themselves)
-      if (status === TaskStatus.WAITING && profile?.role === UserRole.EMPLOYEE) {
+      if (status === TaskStatus.WAITING && profile?.role === UserRole.TEAM) {
         const { data: currentTask } = await supabase.from('tasks').select('assigned_to').eq('id', taskId).single();
         const currentAssigned = currentTask?.assigned_to || [];
         updateData.assigned_to = currentAssigned.filter((id: string) => id !== profile.id);

@@ -4,7 +4,7 @@
 -- 1. ENUMS (Idempotent creation)
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-        CREATE TYPE user_role AS ENUM ('SUPER_MANAGER', 'DEPUTY_MANAGER', 'EMPLOYEE', 'CUSTOMER');
+        CREATE TYPE user_role AS ENUM ('SUPER_MANAGER', 'DEPUTY_MANAGER', 'TEAM', 'CUSTOMER');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'task_status') THEN
         CREATE TYPE task_status AS ENUM ('WAITING', 'IN_PROGRESS', 'COMPLETED', 'CUSTOMER_APPROVAL', 'CANCELLED');

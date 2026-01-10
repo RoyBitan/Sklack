@@ -88,7 +88,7 @@ const SettingsView: React.FC = () => {
         switch (role) {
             case UserRole.SUPER_MANAGER: return 'מנהל ראשי';
             case UserRole.DEPUTY_MANAGER: return 'סגן מנהל';
-            case UserRole.EMPLOYEE: return "צוות";
+            case UserRole.TEAM: return "צוות";
             case UserRole.CUSTOMER: return "לקוח";
             default: return role;
         }
