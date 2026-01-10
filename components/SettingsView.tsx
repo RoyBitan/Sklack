@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Language, UserRole } from '../types';
@@ -17,7 +18,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 // Sub-component to handle edit state
 const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
-    const { updateUser } = useApp();
+    const { updateUser } = useData();
     const { refreshProfile } = useAuth();
     const [phone, setPhone] = useState(user?.phone || '');
     const [nationalId, setNationalId] = useState(user?.national_id || '');

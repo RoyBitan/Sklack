@@ -2,11 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { AppointmentStatus, UserRole } from '../types';
-import { CalendarDays, Clock, Check, X, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, Clock, Check, X, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { useData } from '../contexts/DataContext';
 import { supabase } from '../lib/supabase';
 
 const AppointmentsView: React.FC = () => {
-    const { appointments, refreshData } = useApp();
+    const { t } = useApp();
+    const { appointments, refreshData } = useData();
     const { profile } = useAuth();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedTime, setSelectedTime] = useState<string | null>(null);

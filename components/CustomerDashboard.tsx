@@ -1,11 +1,13 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 import { ProposalStatus, TaskStatus, UserRole, PreCheckInData, Vehicle } from '../types';
 import { Check, X, CreditCard, Phone, AlertCircle, Camera, Mic, PlusCircle, Upload, FileText, Shield, UserCircle2, DollarSign, Square, Car, MapPin, Calendar, Clock, Sparkles, CheckCircle2, ArrowRight, Trash2, Plus } from 'lucide-react';
 
 const CustomerDashboard: React.FC = () => {
-    const { tasks, user, t, updateTaskStatus, updateProposal, addProposal, updateUser, submitCheckIn, navigateTo, addVehicle, removeVehicle } = useApp();
+    const { user, t, navigateTo } = useApp();
+    const { tasks, updateTaskStatus, updateProposal, addProposal, updateUser, submitCheckIn, addVehicle, removeVehicle } = useData();
     const [processingId, setProcessingId] = useState<string | null>(null);
 
     const [showRequestForm, setShowRequestForm] = useState<string | null>(null);

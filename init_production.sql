@@ -112,6 +112,15 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Push Tokens (Multi-device support)
+CREATE TABLE IF NOT EXISTS public.push_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    token_json JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, token_json)
+);
+
 -- Audit Logs
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -151,6 +160,7 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.push_tokens ENABLE ROW LEVEL SECURITY;
 
 -- Cleanup existing policies
 DO $$ 
@@ -185,7 +195,10 @@ CREATE POLICY "Tasks viewable by staff" ON public.tasks FOR SELECT USING (org_id
 CREATE POLICY "Tasks viewable by customers" ON public.tasks FOR SELECT USING (org_id = get_my_org_id() AND get_my_role() = 'CUSTOMER' AND (customer_id = auth.uid() OR vehicle_id IN (SELECT id FROM vehicles WHERE owner_id = auth.uid())));
 CREATE POLICY "Tasks manageable by managers" ON public.tasks FOR ALL USING (org_id = get_my_org_id() AND get_my_role() IN ('SUPER_MANAGER', 'DEPUTY_MANAGER'));
 CREATE POLICY "Tasks manageable by assigned staff" ON public.tasks FOR UPDATE USING (org_id = get_my_org_id() AND auth.uid() = ANY(assigned_to));
-CREATE POLICY "Tasks insertable by authenticated" ON public.tasks FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Tasks insertable by org members" ON public.tasks FOR INSERT WITH CHECK (
+    org_id = get_my_org_id() 
+    AND get_my_role() IN ('SUPER_MANAGER', 'DEPUTY_MANAGER', 'TEAM', 'CUSTOMER')
+);
 
 -- Appointments
 CREATE POLICY "Appointments viewable by members" ON public.appointments FOR SELECT USING (org_id = get_my_org_id() OR customer_id = auth.uid());
@@ -194,6 +207,38 @@ CREATE POLICY "Appointments insertable by authenticated" ON public.appointments 
 -- Notifications
 CREATE POLICY "Notifications viewable by owner" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Notifications manageable by owner" ON public.notifications FOR ALL USING (auth.uid() = user_id);
+
+-- Push Tokens
+CREATE POLICY "Push tokens manageable by owner" ON public.push_tokens FOR ALL USING (auth.uid() = user_id);
+
+-- 4.1 INDEXES (Performance Hardening)
+-- Profiles
+CREATE INDEX IF NOT EXISTS idx_profiles_org_id ON public.profiles(org_id);
+
+-- Vehicles
+CREATE INDEX IF NOT EXISTS idx_vehicles_org_id ON public.vehicles(org_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_owner_id ON public.vehicles(owner_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON public.vehicles(plate);
+
+-- Tasks
+CREATE INDEX IF NOT EXISTS idx_tasks_org_id ON public.tasks(org_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_vehicle_id ON public.tasks(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_customer_id ON public.tasks(customer_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON public.tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON public.tasks(created_at DESC);
+
+-- Appointments
+CREATE INDEX IF NOT EXISTS idx_appointments_org_id ON public.appointments(org_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_customer_id ON public.appointments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_date ON public.appointments(appointment_date);
+
+-- Notifications
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_org_id ON public.notifications(org_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);
+
+-- Push Tokens
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id ON public.push_tokens(user_id);
 
 -- 5. TRIGGER FUNCTIONS
 
@@ -258,6 +303,20 @@ BEGIN
 END;
 $$;
 
+-- Automated Push Notifications (via Edge Function Webhook)
+CREATE OR REPLACE FUNCTION public.trigger_push_notification()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+    -- This is a logical placeholder. In Supabase, you configure 
+    -- the actual HTTP hook via the Dashboard Webhooks UI.
+    -- However, this documents the production requirement.
+    RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.notify_client_task_update()
 RETURNS TRIGGER 
 LANGUAGE plpgsql
@@ -316,9 +375,11 @@ CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXEC
 -- Notifications
 DROP TRIGGER IF EXISTS on_task_created ON public.tasks;
 CREATE TRIGGER on_task_created AFTER INSERT ON public.tasks FOR EACH ROW EXECUTE PROCEDURE public.notify_employees_new_task();
-
 DROP TRIGGER IF EXISTS on_task_updated ON public.tasks;
 CREATE TRIGGER on_task_updated AFTER UPDATE ON public.tasks FOR EACH ROW EXECUTE PROCEDURE public.notify_client_task_update();
+
+DROP TRIGGER IF EXISTS on_notification_created ON public.notifications;
+CREATE TRIGGER on_notification_created AFTER INSERT ON public.notifications FOR EACH ROW EXECUTE PROCEDURE public.trigger_push_notification();
 
 -- 7. RPC FUNCTIONS
 

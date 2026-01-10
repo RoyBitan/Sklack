@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 
 interface Notification {
     id: string;
@@ -18,8 +19,7 @@ interface Notification {
 const NotificationBell: React.FC = () => {
     const { profile } = useAuth();
     const { navigateTo } = useApp();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
+    const { notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useData();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -40,117 +40,19 @@ const NotificationBell: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const fetchNotifications = async () => {
-        if (!profile?.id) return;
-
-        const { data } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', profile.id)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-        if (data) {
-            setNotifications(data);
-            setUnreadCount(data.filter(n => !n.is_read).length);
-        }
-    };
-
-    const handleNotificationClick = async (notif: Notification) => {
-        if (!notif.is_read) {
-            await markAsRead(notif.id);
-        }
-
-        // Handle Deep Linking
-        if (notif.url) {
-            setIsOpen(false);
-
-            // Simple hash translation or custom logic
-            if (notif.url.includes('/#/status/')) {
-                // Public status or customer status view
-                window.location.hash = notif.url.replace('/#', '#');
-            } else if (notif.url.includes('/#/task/')) {
-                // Admin task view - navigate to DASHBOARD or specialized view if exists
-                // For now, redirect to dashboard which might filter by taskId if implemented
-                navigateTo('DASHBOARD');
-            } else if (notif.url.includes('/#/appointments')) {
-                navigateTo('APPOINTMENTS');
+    // Sound alert effect
+    const prevCount = useRef(unreadCount);
+    useEffect(() => {
+        if (unreadCount > prevCount.current) {
+            if (audioRef.current) {
+                audioRef.current.play().catch(e => console.error('Audio play failed', e));
+            }
+            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+                try { window.navigator.vibrate([200, 100, 200]); } catch (e) { }
             }
         }
-    };
-
-    const markAsRead = async (id: string) => {
-        try {
-            await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-            setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-            setUnreadCount(prev => Math.max(0, prev - 1));
-        } catch (e) {
-            console.error('Failed to mark read', e);
-        }
-    };
-
-    const markAllRead = async () => {
-        if (!profile?.id) return;
-        try {
-            await supabase
-                .from('notifications')
-                .update({ is_read: true })
-                .eq('user_id', profile.id)
-                .eq('is_read', false);
-
-            setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-            setUnreadCount(0);
-        } catch (e) {
-            console.error('Failed to mark all read', e);
-        }
-    };
-
-    useEffect(() => {
-        if (!profile?.id) return;
-
-        fetchNotifications();
-
-        // Realtime Subscription
-        const channel = supabase
-            .channel('notifications_bell')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'notifications',
-                    filter: `user_id=eq.${profile.id}`
-                },
-                (payload) => {
-                    const newNotif = payload.new as Notification;
-                    setNotifications(prev => [newNotif, ...prev]);
-                    setUnreadCount(prev => prev + 1);
-
-                    // User preferences from AppContext (user.notification_settings)
-                    // Note: In a real app, you'd fetch this from the user object in useApp()
-                    // Assuming defaults or fetched settings
-
-                    // Sound alert
-                    if (audioRef.current) {
-                        audioRef.current.play().catch(e => console.error('Audio play failed', e));
-                    }
-
-                    // Haptic feedback
-                    if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-                        try {
-                            window.navigator.vibrate([200, 100, 200]);
-                        } catch (e) {
-                            // Ignore vibration errors
-                        }
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [profile?.id]);
+        prevCount.current = unreadCount;
+    }, [unreadCount]);
 
     return (
         <div className="relative" ref={dropdownRef}>
@@ -171,7 +73,7 @@ const NotificationBell: React.FC = () => {
                     <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                         <h3 className="font-black text-gray-900 tracking-tight">התראות</h3>
                         {unreadCount > 0 && (
-                            <button onClick={markAllRead} className="text-[10px] font-black text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+                            <button onClick={markAllNotificationsRead} className="text-[10px] font-black text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
                                 סמן הכל כנקרא
                             </button>
                         )}
@@ -188,7 +90,12 @@ const NotificationBell: React.FC = () => {
                                 <div
                                     key={n.id}
                                     className={`p-5 border-b border-gray-50 hover:bg-gray-50 transition-all cursor-pointer ${!n.is_read ? 'bg-blue-50/20' : ''}`}
-                                    onClick={() => handleNotificationClick(n)}
+                                    onClick={() => {
+                                        if (!n.is_read) markNotificationRead(n.id);
+                                        // Deep link handling (simplified)
+                                        if (n.url) window.location.hash = n.url.replace('/#', '#');
+                                        setIsOpen(false);
+                                    }}
                                 >
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-2">

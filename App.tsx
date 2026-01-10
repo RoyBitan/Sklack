@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppProvider } from './contexts/AppContext';
+import { DataProvider } from './contexts/DataContext';
 import { AuthGuard } from './components/AuthGuard';
 import PublicOrderStatus from './components/PublicOrderStatus';
 
@@ -47,9 +48,11 @@ const App: React.FC = () => {
     // Normal authenticated routes
     return (
         <AuthProvider>
-            <AppProvider>
-                <AuthGuard />
-            </AppProvider>
+            <DataProvider>
+                <AppProvider>
+                    <AuthGuard />
+                </AppProvider>
+            </DataProvider>
         </AuthProvider>
     );
 };

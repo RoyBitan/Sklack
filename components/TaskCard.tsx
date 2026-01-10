@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Task, TaskStatus, Priority, UserRole, Profile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 import { supabase } from '../lib/supabase';
 import {
     Clock,
@@ -31,7 +31,7 @@ interface TaskCardProps {
 
 const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     const { profile } = useAuth();
-    const { refreshData, updateTaskStatus } = useApp();
+    const { refreshData, updateTaskStatus, claimTask, releaseTask, deleteTask: deleteTaskFn } = useData();
     const [expanded, setExpanded] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -65,10 +65,32 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
         }
     };
 
+    const handleClaim = async () => {
+        setUpdating(true);
+        try {
+            await claimTask(task.id);
+        } catch (err) {
+            console.error('Claim failed', err);
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleRelease = async () => {
+        if (!window.confirm('האם אתה בטוח שברצונך לשחרר משימה זו חזרה למאגר?')) return;
+        setUpdating(true);
+        try {
+            await releaseTask(task.id);
+        } catch (err) {
+            console.error('Release failed', err);
+        } finally {
+            setUpdating(false);
+        }
+    };
+
     const handleDelete = async () => {
         if (!window.confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) return;
         try {
-            const { deleteTask: deleteTaskFn } = useApp();
             await deleteTaskFn(task.id);
         } catch (e) {
             console.error('Delete failed', e);
@@ -140,13 +162,49 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                                 )}
                             </div>
 
-                            {/* Assigned Workers - Manager Only */}
-                            {isManager && assignedWorkers.length > 0 && (
+                            {/* Assigned Workers - Manager & Team Only */}
+                            {(isManager || isTeam) && assignedWorkers.length > 0 && (
                                 <div className="flex items-center gap-2 text-sm bg-blue-50/50 w-fit px-3 py-1.5 rounded-xl">
                                     <Wrench size={16} className="text-blue-500" />
                                     <span className="font-bold text-gray-600">
                                         {assignedWorkers.map(w => w.full_name).join(', ')}
                                     </span>
+                                </div>
+                            )}
+
+                            {/* Worker Workflow Buttons */}
+                            {isTeam && (
+                                <div className="flex flex-wrap gap-3 mt-4">
+                                    {!task.assigned_to?.includes(profile?.id || '') ? (
+                                        <button
+                                            onClick={handleClaim}
+                                            disabled={updating}
+                                            className="px-6 py-2.5 bg-black text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-gray-800 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)] active:translate-y-1 active:shadow-none"
+                                        >
+                                            <Play size={14} />
+                                            שייך אליי
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleRelease}
+                                            disabled={updating}
+                                            className="px-6 py-2.5 bg-red-50 text-red-500 border-2 border-red-100 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-red-100 transition-all"
+                                        >
+                                            <Undo2 size={14} />
+                                            שחרר משימה
+                                        </button>
+                                    )}
+
+                                    {task.assigned_to?.includes(profile?.id || '') && task.status !== TaskStatus.COMPLETED && (
+                                        <button
+                                            onClick={() => updateStatus(TaskStatus.COMPLETED)}
+                                            disabled={updating}
+                                            className="px-6 py-2.5 bg-green-500 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-green-600 transition-all"
+                                        >
+                                            <CheckCircle2 size={14} />
+                                            סיים טיפול
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>

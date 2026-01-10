@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import NotificationBell from './NotificationBell';
 import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole, TaskStatus, Priority, Task } from '../types';
 import TaskCard from './TaskCard';
@@ -10,7 +11,8 @@ import InviteMemberModal from './InviteMemberModal';
 import EditTaskModal from './EditTaskModal';
 
 const ManagerDashboard: React.FC = () => {
-    const { tasks, loading, deleteTask } = useApp();
+    const { t } = useApp();
+    const { tasks, loading, deleteTask } = useData();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
     const [showAddModal, setShowAddModal] = useState(false);
@@ -43,13 +45,13 @@ const ManagerDashboard: React.FC = () => {
         completed: tasks.filter(t => t.status === TaskStatus.COMPLETED).length,
     };
 
-    const filteredTasks = tasks.filter(t => {
+    const filteredTasks = React.useMemo(() => tasks.filter(t => {
         const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
         const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             t.vehicle?.plate.includes(searchQuery) ||
             t.vehicle?.model.includes(searchQuery);
         return matchesStatus && matchesSearch;
-    });
+    }), [tasks, statusFilter, searchQuery]);
 
     return (
         <div className="space-y-8 md:space-y-12 animate-fade-in-up">

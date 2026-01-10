@@ -3,6 +3,7 @@ import { X, Save, Car, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 import { Priority, TaskStatus } from '../types';
 
 interface CreateTaskModalProps {
@@ -11,7 +12,7 @@ interface CreateTaskModalProps {
 
 const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
     const { profile } = useAuth();
-    const { refreshData } = useApp();
+    const { refreshData } = useData();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 

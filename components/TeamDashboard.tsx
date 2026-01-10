@@ -1,25 +1,35 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { useData } from '../contexts/DataContext';
 import { TaskStatus } from '../types';
 import TaskCard from './TaskCard';
 import { Briefcase, ListTodo, Sun, Layers, CheckCircle } from 'lucide-react';
 
 const TeamDashboard: React.FC = () => {
-    const { tasks, user, t } = useApp();
+    const { user, t } = useApp();
+    const { tasks } = useData();
     const [view, setView] = useState<'MY_TASKS' | 'OPEN' | 'HISTORY'>('MY_TASKS');
 
     // Filter tasks assigned to me that are IN_PROGRESS
-    const activeTasks = tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.IN_PROGRESS);
+    const activeTasks = React.useMemo(() =>
+        tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.IN_PROGRESS),
+        [tasks, user?.id]);
 
     // Filter tasks assigned to me that are still WAITING (The Queue)
-    const myQueue = tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.WAITING);
+    const myQueue = React.useMemo(() =>
+        tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.WAITING),
+        [tasks, user?.id]);
 
     // Filter open tasks (unassigned or assigned to others but waiting)
-    const openTasks = tasks.filter(t => t.status === TaskStatus.WAITING);
+    const openTasks = React.useMemo(() =>
+        tasks.filter(t => t.status === TaskStatus.WAITING),
+        [tasks]);
 
     // Filter completed tasks assigned to me
-    const completedTasks = tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.COMPLETED);
+    const completedTasks = React.useMemo(() =>
+        tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.COMPLETED),
+        [tasks, user?.id]);
 
     const hasActiveTask = activeTasks.length > 0;
 
