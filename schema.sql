@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     org_id UUID REFERENCES organizations(id),
     full_name TEXT NOT NULL,
-    full_name TEXT NOT NULL,
     role user_role DEFAULT 'CUSTOMER',
     membership_status membership_status DEFAULT 'PENDING',
     phone TEXT,

@@ -8,6 +8,7 @@ interface AuthContextType {
     session: Session | null;
     profile: Profile | null;
     loading: boolean;
+    error: string | null;
     signOut: () => Promise<void>;
     refreshProfile: () => Promise<void>;
 }
@@ -19,6 +20,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [session, setSession] = useState<Session | null>(null);
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const fetchIdRef = useRef(0);
     const failSafeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -44,17 +46,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (error) {
                 console.error(`[AuthContext] #${fetchId} Error:`, error);
+                setError('Failed to fetch profile. Please try again.');
                 setProfile(null);
             } else {
                 console.log(`[AuthContext] #${fetchId} Success:`, data);
                 setProfile(data as Profile);
+                setError(null);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(`[AuthContext] #${fetchId} Exception:`, err);
+            setError(err.message || 'An unexpected error occurred');
             setProfile(null);
         } finally {
             if (fetchId === fetchIdRef.current) {
-                clearFailSafe(); // Clear timer immediately on success
+                clearFailSafe();
                 setLoading(false);
                 console.log(`[AuthContext] #${fetchId} Loading finished`);
             }
@@ -124,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, session, profile, loading, signOut, refreshProfile }}>
+        <AuthContext.Provider value={{ user, session, profile, loading, error, signOut, refreshProfile }}>
             {children}
         </AuthContext.Provider>
     );

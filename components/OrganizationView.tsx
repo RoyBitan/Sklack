@@ -129,8 +129,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
 
         } catch (err: any) {
             setError(err.message || 'הצטרפות למוסך נכשלה. נסה שוב.');
-        } finally {
-            setLoading(false);
+            setLoading(false); // Explicitly clear loading on error
         }
     };
 
