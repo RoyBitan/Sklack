@@ -6,7 +6,7 @@ import Layout from './Layout';
 import OrganizationView from './OrganizationView';
 import PendingApprovalView from './PendingApprovalView';
 import ManagerDashboard from './ManagerDashboard';
-import EmployeeDashboard from './EmployeeDashboard';
+import TeamDashboard from './TeamDashboard';
 import CustomerDashboard from './CustomerDashboard';
 import SettingsView from './SettingsView';
 import VehiclesView from './VehiclesView';
@@ -62,7 +62,7 @@ export const AuthGuard: React.FC = () => {
                     return <ManagerDashboard />;
                 }
                 if (profile.role === UserRole.TEAM) {
-                    return <EmployeeDashboard />;
+                    return <TeamDashboard />;
                 }
                 return <CustomerDashboard />;
         }

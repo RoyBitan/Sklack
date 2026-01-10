@@ -38,7 +38,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     const [assignedWorkers, setAssignedWorkers] = useState<Profile[]>([]);
 
     const isManager = profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.DEPUTY_MANAGER;
-    const isEmployee = profile?.role === UserRole.TEAM;
+    const isTeam = profile?.role === UserRole.TEAM;
 
     // Fetch assigned worker profiles
     useEffect(() => {

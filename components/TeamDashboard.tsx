@@ -5,7 +5,7 @@ import { TaskStatus } from '../types';
 import TaskCard from './TaskCard';
 import { Briefcase, ListTodo, Sun, Layers, CheckCircle } from 'lucide-react';
 
-const EmployeeDashboard: React.FC = () => {
+const TeamDashboard: React.FC = () => {
     const { tasks, user, t } = useApp();
     const [view, setView] = useState<'MY_TASKS' | 'OPEN' | 'HISTORY'>('MY_TASKS');
 
@@ -169,4 +169,4 @@ const EmployeeDashboard: React.FC = () => {
     );
 };
 
-export default EmployeeDashboard;
+export default TeamDashboard;
