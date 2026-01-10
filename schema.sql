@@ -271,8 +271,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger for profile creation
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+-- 8. Atomic Organization Creation
+CREATE OR REPLACE FUNCTION public.create_organization(org_name TEXT)
+RETURNS UUID AS $$
+DECLARE
+    new_org_id UUID;
+BEGIN
+    INSERT INTO organizations (name)
+    VALUES (org_name)
+    RETURNING id INTO new_org_id;
+
+    UPDATE profiles
+    SET 
+        org_id = new_org_id,
+        role = 'SUPER_MANAGER',
+        membership_status = 'APPROVED'
+    WHERE id = auth.uid();
+
+    RETURN new_org_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

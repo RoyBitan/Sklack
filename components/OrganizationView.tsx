@@ -65,30 +65,16 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         setError('');
 
         try {
-            const { data: org, error: orgError } = await supabase
-                .from('organizations')
-                .insert({ name: orgName })
-                .select()
-                .single();
+            // Use atomic RPC to create org and update profile in one transaction
+            const { error: rpcError } = await supabase
+                .rpc('create_organization', { org_name: orgName });
 
-            if (orgError) throw orgError;
-
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .update({
-                    org_id: org.id,
-                    role: UserRole.SUPER_MANAGER, // Auto-assign as admin
-                    membership_status: MembershipStatus.APPROVED // Creator is approved automatically
-                })
-                .eq('id', user.id);
-
-            if (profileError) throw profileError;
+            if (rpcError) throw rpcError;
 
             await refreshProfile();
         } catch (err: any) {
             setError(err.message || 'כשלו ניסיונות יצירת הארגון');
             console.error(err);
-        } finally {
             setLoading(false);
         }
     };

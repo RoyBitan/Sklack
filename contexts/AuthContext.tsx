@@ -125,7 +125,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const refreshProfile = async () => {
-        if (user) await fetchProfile(user.id);
+        if (user) {
+            setLoading(true);
+            await fetchProfile(user.id);
+        }
     };
 
     return (
