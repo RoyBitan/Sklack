@@ -1,0 +1,8 @@
+{
+  "name": "Sklack",
+  "description": "A cross-platform employee management app for auto repair shops with task management, role-based access, and AI features.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

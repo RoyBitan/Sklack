@@ -1,0 +1,181 @@
+import React from 'react';
+import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  LogOut,
+  LayoutDashboard,
+  Settings,
+  Users,
+  Bell,
+  CalendarDays,
+  Car,
+  User,
+  Briefcase,
+  CheckCircle,
+  Database
+} from 'lucide-react';
+import SklackLogo from './SklackLogo';
+import NotificationBell from './NotificationBell';
+import { UserRole } from '../types';
+
+const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { activeView, navigateTo, isRTL, t } = useApp();
+  const { profile, signOut } = useAuth();
+
+  if (!profile) return <>{children}</>;
+
+  // Get page title based on active view
+  const getPageTitle = () => {
+    switch (activeView) {
+      case 'DASHBOARD': return 'דף הבית';
+      case 'TASKS': return 'משימות';
+      case 'VEHICLES': return 'רכבים';
+      case 'APPOINTMENTS': return 'תורים';
+      case 'ORGANIZATION': return 'צוות';
+      case 'SETTINGS': return 'הגדרות';
+      case 'NOTIFICATIONS': return 'התראות';
+      default: return 'Sklack';
+    }
+  };
+
+  const NavItem = ({ view, icon: Icon, label }: { view: any, icon: any, label: string }) => {
+    const isActive = activeView === view;
+    return (
+      <button
+        onClick={() => navigateTo(view)}
+        className={`flex flex-col md:flex-row items-center gap-3 px-6 py-4 rounded-[1.5rem] transition-all duration-300 ${isActive
+          ? 'bg-black text-white shadow-2xl scale-[1.05]'
+          : 'text-gray-400 hover:text-black hover:bg-gray-100'
+          }`}
+      >
+        <Icon size={22} className={isActive ? 'animate-pulse-slow' : ''} />
+        <span className="text-[10px] md:text-sm font-black uppercase tracking-tighter">{label}</span>
+      </button>
+    );
+  };
+
+  // Role-based bottom navigation items
+  const getBottomNavItems = () => {
+    const isAdmin = profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER;
+    const isWorker = profile.role === UserRole.EMPLOYEE;
+    const isCustomer = profile.role === UserRole.CUSTOMER;
+
+    if (isAdmin) {
+      return [
+        { view: 'DASHBOARD', icon: LayoutDashboard, label: 'בית' },
+        { view: 'VEHICLES', icon: Database, label: 'מוסך' },
+        { view: 'ORGANIZATION', icon: Users, label: 'צוות' },
+        { view: 'SETTINGS', icon: User, label: 'הגדרות' },
+      ];
+    }
+
+    if (isWorker) {
+      return [
+        { view: 'DASHBOARD', icon: LayoutDashboard, label: 'דף הבית' },
+        { view: 'SETTINGS', icon: Settings, label: 'הגדרות' },
+      ];
+    }
+
+    if (isCustomer) {
+      return [
+        { view: 'DASHBOARD', icon: LayoutDashboard, label: 'דף הבית' },
+        { view: 'SETTINGS', icon: Settings, label: 'הגדרות' },
+      ];
+    }
+
+    return [];
+  };
+
+  const bottomNavItems = getBottomNavItems();
+
+  return (
+    <div className="min-h-screen bg-[#f8f9fa] flex flex-col font-heebo selection:bg-black selection:text-white">
+      {/* Mobile Header - Sticky */}
+      <header className="md:hidden bg-white/95 backdrop-blur-2xl border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+        <div className="px-5 h-16 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-black text-white p-2 rounded-xl shadow-lg">
+              <SklackLogo size={20} />
+            </div>
+            <h1 className="text-lg font-black tracking-tight">{getPageTitle()}</h1>
+          </div>
+          <NotificationBell />
+        </div>
+      </header>
+
+      {/* Desktop Header */}
+      <header className="hidden md:block bg-white/90 backdrop-blur-2xl border-b border-gray-100 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-8 h-24 flex justify-between items-center">
+          <div className="flex items-center gap-12">
+            <div className="flex items-center gap-4 cursor-pointer group" onClick={() => navigateTo('DASHBOARD')}>
+              <div className="bg-black text-white p-3 rounded-[1.2rem] shadow-2xl transition-transform group-hover:scale-110">
+                <SklackLogo size={28} />
+              </div>
+              <div className="transition-transform group-hover:translate-x-1">
+                <h1 className="text-2xl font-black tracking-tighter leading-none">Sklack</h1>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Garage OS</p>
+              </div>
+            </div>
+
+            <nav className="flex gap-3">
+              <NavItem view="DASHBOARD" icon={LayoutDashboard} label="דף הבית" />
+              {(profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER) && (
+                <>
+                  <NavItem view="TASKS" icon={Car} label="משימות" />
+                  <NavItem view="APPOINTMENTS" icon={CalendarDays} label="תורים" />
+                  <NavItem view="ORGANIZATION" icon={Users} label="צוות" />
+                </>
+              )}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-8">
+            <NotificationBell />
+
+            <div className="flex items-center gap-6 pl-8 border-l border-gray-100">
+              <div className="text-right">
+                <div className="text-base font-black text-gray-900 leading-none">{profile.full_name}</div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1.5">{profile.role === UserRole.EMPLOYEE ? 'צוות' : profile.role}</div>
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="p-4 bg-red-50 text-red-600 rounded-[1.2rem] hover:bg-red-600 hover:text-white transition-all shadow-sm active:scale-90"
+              >
+                <LogOut size={22} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-12 pb-28 md:pb-12">
+        <div className="animate-fade-in-up">
+          {children}
+        </div>
+      </main>
+
+      {/* Mobile Bottom Navigation - Role-Based */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-white/98 backdrop-blur-3xl border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-50 safe-area-inset-bottom">
+        {bottomNavItems.map(({ view, icon: Icon, label }) => {
+          const isActive = activeView === view;
+          return (
+            <button
+              key={view}
+              onClick={() => navigateTo(view)}
+              className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all duration-300 touch-target ${isActive
+                ? 'bg-black text-white shadow-xl scale-110'
+                : 'text-gray-400 active:scale-95'
+                }`}
+            >
+              <Icon size={24} strokeWidth={2.5} />
+              <span className="text-[9px] font-bold uppercase tracking-wider">{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+};
+
+export default Layout;

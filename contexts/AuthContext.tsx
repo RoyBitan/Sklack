@@ -1,0 +1,139 @@
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
+import { Profile } from '../types';
+
+interface AuthContextType {
+    user: User | null;
+    session: Session | null;
+    profile: Profile | null;
+    loading: boolean;
+    signOut: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [user, setUser] = useState<User | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
+    const [profile, setProfile] = useState<Profile | null>(null);
+    const [loading, setLoading] = useState(true);
+    const fetchIdRef = useRef(0);
+    const failSafeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const clearFailSafe = () => {
+        if (failSafeTimerRef.current) {
+            clearTimeout(failSafeTimerRef.current);
+            failSafeTimerRef.current = null;
+        }
+    };
+
+    const fetchProfile = async (userId: string) => {
+        const fetchId = ++fetchIdRef.current;
+        console.log(`[AuthContext] #${fetchId} Fetching profile for:`, userId);
+
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .maybeSingle();
+
+            if (fetchId !== fetchIdRef.current) return;
+
+            if (error) {
+                console.error(`[AuthContext] #${fetchId} Error:`, error);
+                setProfile(null);
+            } else {
+                console.log(`[AuthContext] #${fetchId} Success:`, data);
+                setProfile(data as Profile);
+            }
+        } catch (err) {
+            console.error(`[AuthContext] #${fetchId} Exception:`, err);
+            setProfile(null);
+        } finally {
+            if (fetchId === fetchIdRef.current) {
+                clearFailSafe(); // Clear timer immediately on success
+                setLoading(false);
+                console.log(`[AuthContext] #${fetchId} Loading finished`);
+            }
+        }
+    };
+
+    useEffect(() => {
+        let mounted = true;
+
+        // Fail-safe to prevent indefinite Loading screen
+        failSafeTimerRef.current = setTimeout(() => {
+            if (mounted && loading) {
+                console.warn('[AuthContext] Loading fail-safe triggered after 5s');
+                setLoading(false);
+            }
+        }, 5000);
+
+        const handleAuth = async (sess: Session | null) => {
+            if (!mounted) return;
+            console.log('[AuthContext] Processing auth state:', sess?.user?.id || 'none');
+
+            setSession(sess);
+            setUser(sess?.user ?? null);
+
+            if (sess?.user) {
+                await fetchProfile(sess.user.id);
+            } else {
+                // CRITICAL: Clear state in correct order before setting loading to false
+                setUser(null);
+                setProfile(null);
+                clearFailSafe(); // Clear timer
+                setLoading(false);
+                console.log('[AuthContext] No user, state cleared, loading finished');
+            }
+        };
+
+        // Get initial session
+        supabase.auth.getSession().then(({ data: { session: sess } }) => {
+            console.log('[AuthContext] getSession returned');
+            handleAuth(sess);
+        }).catch(err => {
+            console.error('[AuthContext] getSession error:', err);
+            if (mounted) setLoading(false);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+            console.log('[AuthContext] onAuthStateChange:', _event);
+            handleAuth(sess);
+        });
+
+        return () => {
+            mounted = false;
+            if (failSafeTimerRef.current) clearTimeout(failSafeTimerRef.current);
+            subscription.unsubscribe();
+        };
+    }, []);
+
+    const signOut = async () => {
+        setLoading(true);
+        await supabase.auth.signOut();
+        setProfile(null);
+        setLoading(false);
+    };
+
+    const refreshProfile = async () => {
+        if (user) await fetchProfile(user.id);
+    };
+
+    return (
+        <AuthContext.Provider value={{ user, session, profile, loading, signOut, refreshProfile }}>
+            {children}
+        </AuthContext.Provider>
+    );
+};
+
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};
