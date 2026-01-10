@@ -32,26 +32,15 @@ const Auth: React.FC = () => {
                     email,
                     password,
                     options: {
-                        data: { full_name: fullName }
+                        data: {
+                            full_name: fullName,
+                            role: selectedRole
+                        }
                     }
                 });
                 if (authError) throw authError;
 
                 if (data.user) {
-                    const { error: profileError } = await supabase
-                        .from('profiles')
-                        .insert({
-                            id: data.user.id,
-                            full_name: fullName,
-                            role: selectedRole,
-                        });
-
-                    if (profileError && profileError.code !== '23505') {
-                        console.error('Profile creation error:', profileError);
-                        // If profile creation fails, we might want to alert the user or retry logic
-                        // But for now, just logging it.
-                    }
-
                     setMessage('נרשמת בהצלחה! בדוק את הדוא"ל שלך לאישור החשבון.');
                 }
             }
