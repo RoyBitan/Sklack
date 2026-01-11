@@ -9,6 +9,7 @@ import { Plus, Search, Clock, Wrench, CheckCircle2, UserPlus, Edit, Trash2 } fro
 import CreateTaskModal from './CreateTaskModal';
 import InviteMemberModal from './InviteMemberModal';
 import EditTaskModal from './EditTaskModal';
+import LoadingSpinner from './LoadingSpinner';
 
 const ManagerDashboard: React.FC = () => {
     const { t } = useApp();
@@ -18,6 +19,10 @@ const ManagerDashboard: React.FC = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+    if (loading) {
+        return <LoadingSpinner message="טוען נתונים..." />;
+    }
 
     const getStatusLabel = (s: TaskStatus) => {
         switch (s) {

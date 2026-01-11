@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Language, UserRole } from '../types';
 import { User, Shield, Info, Globe, Bell, Lock, Mail, Bug, FileText, LogOut, ChevronRight, Edit2 } from 'lucide-react';
+import LoadingSpinner from './LoadingSpinner';
 
 const LANGUAGE_LABELS: Record<string, string> = {
     [Language.HEBREW]: 'עברית (Hebrew)',
@@ -81,9 +82,13 @@ const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
 
 const SettingsView: React.FC = () => {
     const { user, t, language, switchLanguage } = useApp();
-    const { profile, signOut } = useAuth();
+    const { profile, signOut, loading: authLoading } = useAuth();
     const [pushEnabled, setPushEnabled] = useState(false);
     const [checkingPush, setCheckingPush] = useState(true);
+
+    if (authLoading || !user) {
+        return <LoadingSpinner message="טוען הגדרות..." />;
+    }
 
     const getRoleLabel = (role: UserRole) => {
         switch (role) {
@@ -140,7 +145,7 @@ const SettingsView: React.FC = () => {
         if (!file || !profile?.id) return;
 
         try {
-            const fileExt = file.name.split('.').pop();
+            const fileExt = file?.name?.split?.('.').pop() || 'unknown';
             const filePath = `${profile.id}/avatar.${fileExt}`;
 
             const { error: uploadError } = await supabase.storage
@@ -189,7 +194,7 @@ const SettingsView: React.FC = () => {
                 <div className="flex items-center gap-6 mb-6">
                     <div className="relative group">
                         <div className="w-24 h-24 bg-gradient-to-br from-black to-gray-700 text-white rounded-full flex items-center justify-center text-4xl font-black shadow-xl overflow-hidden">
-                            {user?.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" /> : user?.name.charAt(0)}
+                            {user?.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" /> : user?.full_name?.charAt?.(0) || 'U'}
                         </div>
                         <label className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg border border-gray-100 hover:scale-110 transition-transform cursor-pointer">
                             <Edit2 size={14} className="text-black" />
@@ -197,7 +202,7 @@ const SettingsView: React.FC = () => {
                         </label>
                     </div>
                     <div className="flex-1">
-                        <h3 className="text-2xl font-black text-gray-900">{user?.name}</h3>
+                        <h3 className="text-2xl font-black text-gray-900">{user?.full_name || 'משתמש'}</h3>
                         <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-bold uppercase">
                                 {getRoleLabel(user!.role)}

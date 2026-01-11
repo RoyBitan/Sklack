@@ -134,7 +134,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
             <div className="flex items-center gap-6 pl-8 border-l border-gray-100">
               <div className="text-right">
-                <div className="text-base font-black text-gray-900 leading-none">{profile.full_name}</div>
+                <div className="text-base font-black text-gray-900 leading-none">{profile?.full_name?.split?.(' ')?.[0] || 'משתמש'}</div>
                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1.5">{profile.role === UserRole.TEAM ? 'צוות' : profile.role}</div>
               </div>
               <button

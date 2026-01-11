@@ -256,7 +256,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
 
     const orgDisplayName = profile?.membership_status === MembershipStatus.PENDING
         ? 'בהמתנה לאישור'
-        : (isManager ? `המוסך של ${profile.full_name.split(' ')[0]}` : 'חבר בארגון');
+        : (isManager ? `המוסך של ${profile?.full_name?.split?.(' ')?.[0] || 'המנהל'}` : 'חבר בארגון');
 
     return (
         <div className="max-w-6xl mx-auto space-y-16 py-12 px-8 animate-fade-in-up">

@@ -4,6 +4,9 @@ import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 
 interface DataContextType {
+    tasks: Task[];
+    appointments: Appointment[];
+    vehicles: Vehicle[];
     notifications: AppNotification[];
     unreadCount: number;
     loading: boolean;
@@ -86,7 +89,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: profile.org_id ? `org_id=eq.${profile.org_id}` : undefined }, (payload) => {
                 if (payload.eventType === 'INSERT') {
-                    setAppointments(prev => [payload.new as Appointment, ...prev.sort((a, b) => b.appointment_date.localeCompare(a.appointment_date)).slice(0, 99)]);
+                    setAppointments(prev => [...prev, payload.new as Appointment].sort((a, b) => b.appointment_date.localeCompare(a.appointment_date)).slice(0, 99));
                 } else if (payload.eventType === 'UPDATE') {
                     setAppointments(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a));
                 }

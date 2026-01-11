@@ -10,7 +10,7 @@ const AppointmentsView: React.FC = () => {
     const { t } = useApp();
     const { appointments, refreshData } = useData();
     const { profile } = useAuth();
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split?.('T')?.[0] || new Date().toISOString().substring(0, 10));
     const [selectedTime, setSelectedTime] = useState<string | null>(null);
     const [selectedService, setSelectedService] = useState('');
     const [loading, setLoading] = useState(false);

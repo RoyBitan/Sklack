@@ -1,14 +1,26 @@
-
 import React, { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useData } from '../contexts/DataContext';
 import { ProposalStatus, TaskStatus, UserRole, PreCheckInData, Vehicle } from '../types';
-import { Check, X, CreditCard, Phone, AlertCircle, Camera, Mic, PlusCircle, Upload, FileText, Shield, UserCircle2, DollarSign, Square, Car, MapPin, Calendar, Clock, Sparkles, CheckCircle2, ArrowRight, Trash2, Plus } from 'lucide-react';
+import {
+    Check, X, CreditCard, Phone, AlertCircle, Camera, Mic, PlusCircle,
+    Upload, FileText, Shield, UserCircle2, DollarSign, Square, Car,
+    MapPin, Calendar, Clock, Sparkles, CheckCircle2, ArrowRight, Trash2, Plus,
+    ChevronRight, Settings, Star, Search, Filter
+} from 'lucide-react';
+import LoadingSpinner from './LoadingSpinner';
 
 const CustomerDashboard: React.FC = () => {
     const { user, t, navigateTo } = useApp();
-    const { tasks, updateTaskStatus, updateProposal, addProposal, updateUser, submitCheckIn, addVehicle, removeVehicle } = useData();
+    const {
+        tasks, vehicles, loading, updateTaskStatus, updateProposal,
+        addProposal, updateUser, submitCheckIn, addVehicle, removeVehicle
+    } = useData();
     const [processingId, setProcessingId] = useState<string | null>(null);
+
+    if (loading || !user) {
+        return <LoadingSpinner message="טוען לוח בקרה..." />;
+    }
 
     const [showRequestForm, setShowRequestForm] = useState<string | null>(null);
     const [requestText, setRequestText] = useState('');
@@ -28,7 +40,7 @@ const CustomerDashboard: React.FC = () => {
     // Pre-CheckIn Form State
     const [showCheckIn, setShowCheckIn] = useState<Vehicle | null>(null);
     const [checkInForm, setCheckInForm] = useState<Partial<PreCheckInData>>({
-        fullName: user?.name || '',
+        fullName: user?.full_name || '',
         phone: user?.phone || '',
         mileage: '',
         carCode: '',
@@ -117,7 +129,7 @@ const CustomerDashboard: React.FC = () => {
                 <div className="absolute -top-10 -right-10 w-48 h-48 bg-blue-600/30 rounded-full blur-3xl"></div>
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 text-start">
                     <div>
-                        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">שלום, {user?.name.split(' ')[0]}</h1>
+                        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">שלום, {user?.full_name?.split?.(' ')?.[0] || 'לקוח'}</h1>
                         <p className="text-gray-400 font-bold max-w-sm leading-relaxed text-base md:text-lg">כאן תוכל לנהל את רכביך, לעקוב אחר טיפולים ולבצע צ'ק-אין מהיר.</p>
                     </div>
                     <div className="bg-white/10 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/10 flex items-center gap-4 shadow-xl">

@@ -4,12 +4,17 @@ import { useApp } from '../contexts/AppContext';
 import { useData } from '../contexts/DataContext';
 import { TaskStatus } from '../types';
 import TaskCard from './TaskCard';
+import LoadingSpinner from './LoadingSpinner';
 import { Briefcase, ListTodo, Sun, Layers, CheckCircle } from 'lucide-react';
 
 const TeamDashboard: React.FC = () => {
     const { user, t } = useApp();
-    const { tasks } = useData();
+    const { tasks, loading } = useData();
     const [view, setView] = useState<'MY_TASKS' | 'OPEN' | 'HISTORY'>('MY_TASKS');
+
+    if (loading || !user) {
+        return <LoadingSpinner message="טוען לוח בקרה..." />;
+    }
 
     // Filter tasks assigned to me that are IN_PROGRESS
     const activeTasks = React.useMemo(() =>
@@ -46,7 +51,7 @@ const TeamDashboard: React.FC = () => {
                         <Sun size={16} />
                         <span>יום עבודה נעים!</span>
                     </div>
-                    <h1 className="text-2xl md:text-3xl font-bold mb-2">שלום, {user?.name.split(' ')[0]}</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold mb-2">שלום, {user?.full_name?.split?.(' ')?.[0] || 'צוות'}</h1>
                     <p className="text-blue-100 opacity-90 text-sm md:text-base max-w-sm">
                         יש לך <span className="font-bold bg-white/20 px-2 py-0.5 rounded text-white">{activeTasks.length}</span> משימות פעילות היום
                         {myQueue.length > 0 && ` + ${myQueue.length} בתור`}
