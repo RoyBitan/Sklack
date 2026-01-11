@@ -152,9 +152,13 @@ export type AppView = 'DASHBOARD' | 'TASKS' | 'VEHICLES' | 'ORGANIZATION' | 'NOT
 
 export interface Notification {
   id: string;
+  user_id: string;
   title: string;
   message: string;
-  read: boolean;
+  is_read: boolean;
+  task_id?: string;
+  url?: string;
+  type: string;
   created_at: string;
 }
 

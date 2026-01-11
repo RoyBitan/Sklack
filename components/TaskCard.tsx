@@ -21,6 +21,7 @@ import {
     Edit2,
     Trash2,
     Undo2,
+    RotateCcw,
     ShieldAlert
 } from 'lucide-react';
 import EditTaskModal from './EditTaskModal';
@@ -108,7 +109,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     const pInfo = getPriorityInfo(task.priority);
 
     return (
-        <div className={`card-premium overflow-hidden group transition-all duration-500 ${expanded ? 'scale-[1.02] ring-2 ring-black/5' : ''}`}>
+        <div id={`task-${task.id}`} className={`card-premium overflow-hidden group transition-all duration-500 ${expanded ? 'scale-[1.02] ring-2 ring-black/5' : ''}`}>
             <div className="p-5 md:p-10">
                 <div className="flex flex-col lg:flex-row justify-between gap-6 md:gap-10">
                     {/* Main Info */}
@@ -179,19 +180,19 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                                         <button
                                             onClick={handleClaim}
                                             disabled={updating}
-                                            className="px-6 py-2.5 bg-black text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-gray-800 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)] active:translate-y-1 active:shadow-none"
+                                            title="שייך אליי"
+                                            className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center hover:bg-emerald-600 transition-all shadow-[0_4px_12px_rgba(16,185,129,0.3)] hover:scale-110 active:scale-95"
                                         >
-                                            <Play size={14} />
-                                            שייך אליי
+                                            <Play size={24} fill="white" />
                                         </button>
                                     ) : (
                                         <button
                                             onClick={handleRelease}
                                             disabled={updating}
-                                            className="px-6 py-2.5 bg-red-50 text-red-500 border-2 border-red-100 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-red-100 transition-all"
+                                            title="שחרר משימה"
+                                            className="w-14 h-14 bg-gray-100 text-gray-500 rounded-2xl flex items-center justify-center hover:bg-gray-200 transition-all hover:scale-110 active:scale-95"
                                         >
-                                            <Undo2 size={14} />
-                                            שחרר משימה
+                                            <RotateCcw size={24} />
                                         </button>
                                     )}
 
@@ -199,9 +200,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                                         <button
                                             onClick={() => updateStatus(TaskStatus.COMPLETED)}
                                             disabled={updating}
-                                            className="px-6 py-2.5 bg-green-500 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-green-600 transition-all"
+                                            title="סיים טיפול"
+                                            className="h-14 px-8 bg-green-500 text-white rounded-2xl text-sm font-black uppercase tracking-widest flex items-center gap-2 hover:bg-green-600 transition-all shadow-[0_4px_12px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95"
                                         >
-                                            <CheckCircle2 size={14} />
+                                            <CheckCircle2 size={24} />
                                             סיים טיפול
                                         </button>
                                     )}

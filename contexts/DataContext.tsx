@@ -101,9 +101,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (payload.eventType === 'INSERT') {
                     setDataState(prev => ({ ...prev, tasks: [payload.new as Task, ...prev.tasks.slice(0, 99)] }));
                 } else if (payload.eventType === 'UPDATE') {
-                    setDataState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t) }));
+                    console.log('[Realtime] Task Update:', payload.new.id, payload.new.status);
+                    setDataState(prev => ({
+                        ...prev,
+                        tasks: prev.tasks.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t)
+                    }));
                 } else if (payload.eventType === 'DELETE') {
-                    setDataState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id === payload.old.id) }));
+                    console.log('[Realtime] Task Delete:', payload.old.id);
+                    setDataState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== payload.old.id) }));
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: profile.org_id ? `org_id=eq.${profile.org_id}` : undefined }, (payload) => {
@@ -153,14 +158,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updateTaskStatus = useCallback(async (taskId: string, status: TaskStatus) => {
         try {
-            await supabase.from('tasks').update({ status }).eq('id', taskId);
-        } catch (e) { console.error(e); }
-    }, []);
+            // Optimistic update
+            setDataState(prev => ({
+                ...prev,
+                tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status } : t)
+            }));
+            const { error } = await supabase.from('tasks').update({ status }).eq('id', taskId);
+            if (error) throw error;
+        } catch (e) {
+            console.error('Update status failed', e);
+            refreshData();
+        }
+    }, [refreshData]);
 
     const claimTask = useCallback(async (taskId: string) => {
         const currProfile = profileRef.current;
         if (!currProfile) return;
         try {
+            // Optimistic update for immediate UI reflection
+            setDataState(prev => ({
+                ...prev,
+                tasks: prev.tasks.map(t => t.id === taskId ? {
+                    ...t,
+                    assigned_to: [...(t.assigned_to || []), currProfile.id],
+                    status: TaskStatus.IN_PROGRESS
+                } : t)
+            }));
+
             const { data: currentTask } = await supabase.from('tasks').select('assigned_to').eq('id', taskId).single();
             let assigned_to = currentTask?.assigned_to || [];
             if (!assigned_to.includes(currProfile.id)) {
@@ -170,26 +194,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 assigned_to,
                 status: TaskStatus.IN_PROGRESS
             }).eq('id', taskId);
-        } catch (e) { console.error(e); }
-    }, []);
+        } catch (e) {
+            console.error('Claim failed:', e);
+            refreshData(); // Rollback on error
+        }
+    }, [refreshData]);
 
     const releaseTask = useCallback(async (taskId: string) => {
         const currProfile = profileRef.current;
         if (!currProfile) return;
         try {
+            console.log('[DataContext] Releasing task:', taskId);
+            // Optimistic update
+            setDataState(prev => ({
+                ...prev,
+                tasks: prev.tasks.map(t => t.id === taskId ? {
+                    ...t,
+                    assigned_to: (t.assigned_to || []).filter(id => id !== currProfile.id),
+                    status: (t.assigned_to || []).length <= 1 ? TaskStatus.WAITING : t.status
+                } : t)
+            }));
+
             const { data: currentTask } = await supabase.from('tasks').select('assigned_to').eq('id', taskId).single();
             let assigned_to = currentTask?.assigned_to || [];
             assigned_to = assigned_to.filter((id: string) => id !== currProfile.id);
-            const newStatus = assigned_to.length === 0 ? TaskStatus.WAITING : undefined;
-            const updateData: any = { assigned_to };
-            if (newStatus) updateData.status = newStatus;
-            await supabase.from('tasks').update(updateData).eq('id', taskId);
-        } catch (e) { console.error(e); }
-    }, []);
+
+            const updateData: any = {
+                assigned_to: assigned_to.length > 0 ? assigned_to : [],
+                status: assigned_to.length === 0 ? TaskStatus.WAITING : undefined
+            };
+
+            const { error } = await supabase.from('tasks').update(updateData).eq('id', taskId);
+            if (error) throw error;
+        } catch (e) {
+            console.error('Release failed', e);
+            refreshData();
+        }
+    }, [refreshData]);
 
     const deleteTask = useCallback(async (taskId: string) => {
-        await supabase.from('tasks').delete().eq('id', taskId);
-    }, []);
+        try {
+            // Optimistic update
+            setDataState(prev => ({
+                ...prev,
+                tasks: prev.tasks.filter(t => t.id !== taskId)
+            }));
+            const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+            if (error) throw error;
+        } catch (e) {
+            console.error('Delete failed:', e);
+            refreshData(); // Rollback
+        }
+    }, [refreshData]);
 
     const updateUser = useCallback(async (userId: string, data: any) => {
         const { error } = await supabase.from('profiles').update(data).eq('id', userId);
