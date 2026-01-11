@@ -20,6 +20,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { profile } = useAuth();
   const [language, setLanguage] = useState<Language>(Language.HEBREW);
   const [activeView, setActiveView] = useState<AppView>('DASHBOARD');
+  const hasAttemptedPushRef = React.useRef(false);
 
   const isRTL = [Language.HEBREW].includes(language);
   const t = useCallback((key: string) => TRANSLATIONS[language]?.[key] || key, [language]);
@@ -32,19 +33,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!profile?.id) return;
 
     const registerPush = async () => {
-      // 1. Check browser support
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.warn('[Push] Browser does not support push notifications');
-        return;
-      }
-
-      const publicKey = (import.meta as any).env.VITE_VAPID_PUBLIC_KEY;
-      if (!publicKey) {
-        console.error('[Push] VAPID Public Key missing');
-        return;
-      }
+      if (hasAttemptedPushRef.current) return;
+      hasAttemptedPushRef.current = true;
 
       try {
+        // 1. Check browser support
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+          console.warn('[Push] Browser does not support push notifications');
+          return;
+        }
+
+        const publicKey = (import.meta as any).env.VITE_VAPID_PUBLIC_KEY;
+        if (!publicKey) {
+          console.warn('[Push] VAPID Public Key missing');
+          return;
+        }
+
         // 2. Wait for SW to be ready
         console.log('[Push] Waiting for Service Worker...');
         const registration = await navigator.serviceWorker.ready;
@@ -72,20 +76,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
 
-        if (subscription) {
+        if (subscription && profile?.id) {
           const tokenJson = subscription.toJSON();
-          // Multi-device hardening: Use the new push_tokens table
           console.log('[Push] Storing token in database...');
           const { error } = await supabase.from('push_tokens').upsert({
             user_id: profile.id,
             token_json: tokenJson
           }, { onConflict: 'user_id, token_json' });
 
-          if (error) throw error;
-          console.log('[Push] Token registered successfully for multi-device support');
+          if (error) console.warn('[Push] DB store failed:', error);
+          else console.log('[Push] Token registered successfully');
         }
       } catch (e) {
-        console.error('[Push] Registration failed:', e);
+        console.warn('[Push] Registration background task failed silently:', e);
       }
     };
 

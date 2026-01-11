@@ -23,11 +23,15 @@ const App: React.FC = () => {
 
         // Listen for messages from Service Worker (Deep Linking)
         const handleMessage = (event: MessageEvent) => {
-            if (event.data && event.data.type === 'NAVIGATE') {
-                const url = event.data.url;
-                if (url.startsWith('/')) {
-                    window.location.hash = url.replace('/#', '#');
+            try {
+                if (event.data && event.data.type === 'NAVIGATE') {
+                    const url = event.data.url;
+                    if (url.startsWith('/')) {
+                        window.location.hash = url.replace('/#', '#');
+                    }
                 }
+            } catch (err) {
+                console.warn('[SW Message] Failed to handle navigation message:', err);
             }
         };
         navigator.serviceWorker?.addEventListener('message', handleMessage);
