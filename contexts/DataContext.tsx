@@ -37,7 +37,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(false);
 
     const refreshData = useCallback(async () => {
-        if (!profile) return;
+        if (!profile?.id) return;
         setLoading(true);
         try {
             if (profile.role === UserRole.CUSTOMER) {
@@ -70,14 +70,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } finally {
             setLoading(false);
         }
-    }, [profile]);
+    }, [profile?.id, profile?.org_id, profile?.role]);
 
     // Real-time State Patching
     useEffect(() => {
-        if (!profile) return;
+        if (!profile?.id) return;
         refreshData();
 
-        const channel = supabase.channel('db-changes')
+        const channel = supabase.channel(`db-changes-${profile.id}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: profile.org_id ? `org_id=eq.${profile.org_id}` : undefined }, (payload) => {
                 if (payload.eventType === 'INSERT') {
                     setTasks(prev => [payload.new as Task, ...prev.slice(0, 99)]);
@@ -101,7 +101,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [profile, refreshData]);
+    }, [profile?.id, profile?.org_id, refreshData]);
 
     const addVehicle = useCallback(async (vehicleData: Partial<Vehicle>) => {
         if (!profile) return;

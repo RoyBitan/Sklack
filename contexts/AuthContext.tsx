@@ -22,6 +22,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const fetchIdRef = useRef(0);
+    const isFetchingRef = useRef<string | null>(null);
     const failSafeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const clearFailSafe = () => {
@@ -32,7 +33,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const fetchProfile = useCallback(async (userId: string) => {
+        if (isFetchingRef.current === userId) {
+            console.log(`[AuthContext] Fetch already in progress for: ${userId}`);
+            return;
+        }
+
         const fetchId = ++fetchIdRef.current;
+        isFetchingRef.current = userId;
         console.log(`[AuthContext] #${fetchId} Fetching profile for:`, userId);
 
         try {
@@ -50,7 +57,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setProfile(null);
             } else {
                 console.log(`[AuthContext] #${fetchId} Success:`, data);
-                setProfile(data as Profile);
+
+                // STRICT CHANGE DETECTION: Only update state if data actually changed
+                setProfile(prev => {
+                    if (JSON.stringify(prev) === JSON.stringify(data)) {
+                        console.log(`[AuthContext] #${fetchId} Profile unchanged, skipping setProfile`);
+                        return prev;
+                    }
+                    return data as Profile;
+                });
                 setError(null);
             }
         } catch (err: any) {
@@ -59,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setProfile(null);
         } finally {
             if (fetchId === fetchIdRef.current) {
+                isFetchingRef.current = null;
                 clearFailSafe();
                 setLoading(false);
                 console.log(`[AuthContext] #${fetchId} Loading finished`);
@@ -110,12 +126,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             handleAuth(sess);
         });
 
+        // Realtime Profile Listener: Keep profile in sync without manual refreshes
+        // This is guarded by the change detection in setProfile (called via fetchProfile or direct set)
+        const profileChannel = supabase.channel(`profile-sync-${Math.random()}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'profiles'
+            }, (payload) => {
+                if (payload.new.id === user?.id) {
+                    console.log('[AuthContext] Realtime profile update received:', payload.new);
+                    setProfile(prev => {
+                        if (JSON.stringify(prev) === JSON.stringify(payload.new)) return prev;
+                        return payload.new as Profile;
+                    });
+                }
+            })
+            .subscribe();
+
         return () => {
             mounted = false;
             if (failSafeTimerRef.current) clearTimeout(failSafeTimerRef.current);
             subscription.unsubscribe();
+            supabase.removeChannel(profileChannel);
         };
-    }, []);
+    }, [user?.id]);
 
     const signOut = useCallback(async () => {
         setLoading(true);
