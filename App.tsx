@@ -13,11 +13,9 @@ const App: React.FC = () => {
         const checkRoute = () => {
             const hash = window.location.hash;
             const statusMatch = hash.match(/#\/status\/(.+)/);
-            if (statusMatch) {
-                setPublicTaskId(statusMatch[1]);
-            } else {
-                setPublicTaskId(null);
-            }
+            const newId = statusMatch ? statusMatch[1] : null;
+
+            setPublicTaskId(prev => prev === newId ? prev : newId);
         };
 
         checkRoute();

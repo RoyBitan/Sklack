@@ -12,6 +12,7 @@ import SettingsView from './SettingsView';
 import VehiclesView from './VehiclesView';
 import NotificationsView from './NotificationsView';
 import AppointmentsView from './AppointmentsView';
+import LoadingSpinner from './LoadingSpinner';
 import { UserRole, MembershipStatus } from '../types';
 
 export const AuthGuard: React.FC = () => {
@@ -19,11 +20,7 @@ export const AuthGuard: React.FC = () => {
     const { activeView } = useApp();
 
     if (authLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa]">
-                <div className="animate-pulse-slow text-2xl font-bold">טוען...</div>
-            </div>
-        );
+        return <LoadingSpinner message="מאמת פרטי משתמש..." />;
     }
 
     if (!user) {

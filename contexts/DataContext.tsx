@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, Appointment, Notification as AppNotification, Vehicle, UserRole, TaskStatus, PreCheckInData } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
@@ -103,7 +103,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => { supabase.removeChannel(channel); };
     }, [profile, refreshData]);
 
-    const addVehicle = async (vehicleData: Partial<Vehicle>) => {
+    const addVehicle = useCallback(async (vehicleData: Partial<Vehicle>) => {
         if (!profile) return;
         try {
             const { error } = await supabase.from('vehicles').upsert({
@@ -114,24 +114,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (error) throw error;
             await refreshData();
         } catch (e) { console.error(e); }
-    };
+    }, [profile, refreshData]);
 
-    const removeVehicle = async (plate: string) => {
+    const removeVehicle = useCallback(async (plate: string) => {
         try {
             const { error } = await supabase.from('vehicles').update({ owner_id: null }).eq('plate', plate).eq('owner_id', profile?.id);
             if (error) throw error;
             await refreshData();
         } catch (e) { console.error(e); }
-    };
+    }, [profile?.id, refreshData]);
 
-    const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
+    const updateTaskStatus = useCallback(async (taskId: string, status: TaskStatus) => {
         if (!profile) return;
         try {
             await supabase.from('tasks').update({ status }).eq('id', taskId);
         } catch (e) { console.error(e); }
-    };
+    }, [profile]);
 
-    const claimTask = async (taskId: string) => {
+    const claimTask = useCallback(async (taskId: string) => {
         if (!profile) return;
         try {
             const { data: currentTask } = await supabase.from('tasks').select('assigned_to').eq('id', taskId).single();
@@ -144,9 +144,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 status: TaskStatus.IN_PROGRESS
             }).eq('id', taskId);
         } catch (e) { console.error(e); }
-    };
+    }, [profile]);
 
-    const releaseTask = async (taskId: string) => {
+    const releaseTask = useCallback(async (taskId: string) => {
         if (!profile) return;
         try {
             const { data: currentTask } = await supabase.from('tasks').select('assigned_to').eq('id', taskId).single();
@@ -161,7 +161,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             await supabase.from('tasks').update(updateData).eq('id', taskId);
         } catch (e) { console.error(e); }
-    };
+    }, [profile]);
 
     const deleteTask = async (taskId: string) => {
         await supabase.from('tasks').delete().eq('id', taskId);
@@ -201,19 +201,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUnreadCount(prev => Math.max(0, prev - 1));
     };
 
-    const markAllNotificationsRead = async () => {
+    const markAllNotificationsRead = useCallback(async () => {
         if (!profile?.id) return;
         await supabase.from('notifications').update({ is_read: true }).eq('user_id', profile.id).eq('is_read', false);
         setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
         setUnreadCount(0);
-    };
+    }, [profile?.id]);
+
+    const value = useMemo(() => ({
+        tasks, appointments, notifications, unreadCount, vehicles, loading, refreshData,
+        addVehicle, removeVehicle, updateTaskStatus, claimTask, releaseTask, updateUser, deleteTask, addProposal, updateProposal, submitCheckIn,
+        markNotificationRead, markAllNotificationsRead
+    }), [
+        tasks, appointments, notifications, unreadCount, vehicles, loading, refreshData,
+        addVehicle, removeVehicle, updateTaskStatus, claimTask, releaseTask, updateUser, deleteTask, addProposal, updateProposal, submitCheckIn,
+        markNotificationRead, markAllNotificationsRead
+    ]);
 
     return (
-        <DataContext.Provider value={{
-            tasks, appointments, notifications, unreadCount, vehicles, loading, refreshData,
-            addVehicle, removeVehicle, updateTaskStatus, claimTask, releaseTask, updateUser, deleteTask, addProposal, updateProposal, submitCheckIn,
-            markNotificationRead, markAllNotificationsRead
-        }}>
+        <DataContext.Provider value={value}>
             {children}
         </DataContext.Provider>
     );

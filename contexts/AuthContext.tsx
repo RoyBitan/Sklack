@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
@@ -31,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const fetchProfile = async (userId: string) => {
+    const fetchProfile = useCallback(async (userId: string) => {
         const fetchId = ++fetchIdRef.current;
         console.log(`[AuthContext] #${fetchId} Fetching profile for:`, userId);
 
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log(`[AuthContext] #${fetchId} Loading finished`);
             }
         }
-    };
+    }, []);
 
     useEffect(() => {
         let mounted = true;
@@ -117,22 +117,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, []);
 
-    const signOut = async () => {
+    const signOut = useCallback(async () => {
         setLoading(true);
         await supabase.auth.signOut();
         setProfile(null);
         setLoading(false);
-    };
+    }, []);
 
-    const refreshProfile = async () => {
+    const refreshProfile = useCallback(async () => {
         if (user) {
             setLoading(true);
             await fetchProfile(user.id);
         }
-    };
+    }, [user, fetchProfile]);
+
+    const value = React.useMemo(() => ({
+        user, session, profile, loading, error, signOut, refreshProfile
+    }), [user, session, profile, loading, error, signOut, refreshProfile]);
 
     return (
-        <AuthContext.Provider value={{ user, session, profile, loading, error, signOut, refreshProfile }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

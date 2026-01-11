@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Language, AppView } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { useAuth } from './AuthContext';
@@ -24,8 +24,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isRTL = [Language.HEBREW].includes(language);
   const t = useCallback((key: string) => TRANSLATIONS[language]?.[key] || key, [language]);
 
-  const navigateTo = (view: AppView) => setActiveView(view);
-  const switchLanguage = (lang: Language) => setLanguage(lang);
+  const navigateTo = useCallback((view: AppView) => setActiveView(view), []);
+  const switchLanguage = useCallback((lang: Language) => setLanguage(lang), []);
 
   // Multi-device Push Registration
   useEffect(() => {
@@ -106,11 +106,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
   }, [language, isRTL]);
 
+  const value = useMemo(() => ({
+    language, activeView, navigateTo, switchLanguage, t, isRTL,
+    user: profile
+  }), [language, activeView, navigateTo, switchLanguage, t, isRTL, profile]);
+
   return (
-    <AppContext.Provider value={{
-      language, activeView, navigateTo, switchLanguage, t, isRTL,
-      user: profile
-    }}>
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );
