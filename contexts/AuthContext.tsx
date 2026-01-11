@@ -16,14 +16,29 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
-    const [profile, setProfile] = useState<Profile | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [authState, setAuthState] = useState<{
+        user: User | null;
+        session: Session | null;
+        profile: Profile | null;
+        loading: boolean;
+        error: string | null;
+    }>({
+        user: null,
+        session: null,
+        profile: null,
+        loading: true,
+        error: null,
+    });
+
     const fetchIdRef = useRef(0);
     const isFetchingRef = useRef<string | null>(null);
     const failSafeTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const userRef = useRef<User | null>(null);
+
+    // Keep userRef in sync for stable callbacks
+    useEffect(() => {
+        userRef.current = authState.user;
+    }, [authState.user]);
 
     const clearFailSafe = () => {
         if (failSafeTimerRef.current) {
@@ -53,31 +68,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (error) {
                 console.error(`[AuthContext] #${fetchId} Error:`, error);
-                setError('Failed to fetch profile. Please try again.');
-                setProfile(null);
+                setAuthState(prev => ({
+                    ...prev,
+                    error: 'Failed to fetch profile',
+                    profile: null,
+                    loading: false
+                }));
             } else {
                 console.log(`[AuthContext] #${fetchId} Success:`, data);
 
-                // STRICT CHANGE DETECTION: Only update state if data actually changed
-                setProfile(prev => {
-                    if (JSON.stringify(prev) === JSON.stringify(data)) {
-                        console.log(`[AuthContext] #${fetchId} Profile unchanged, skipping setProfile`);
-                        return prev;
-                    }
-                    return data as Profile;
+                setAuthState(prev => {
+                    const isUnchanged = JSON.stringify(prev.profile) === JSON.stringify(data);
+                    if (isUnchanged && !prev.loading) return prev;
+
+                    return {
+                        ...prev,
+                        profile: data as Profile,
+                        error: null,
+                        loading: false
+                    };
                 });
-                setError(null);
             }
         } catch (err: any) {
             console.error(`[AuthContext] #${fetchId} Exception:`, err);
-            setError(err.message || 'An unexpected error occurred');
-            setProfile(null);
+            setAuthState(prev => ({
+                ...prev,
+                error: err.message || 'Error occurred',
+                profile: null,
+                loading: false
+            }));
         } finally {
             if (fetchId === fetchIdRef.current) {
                 isFetchingRef.current = null;
                 clearFailSafe();
-                setLoading(false);
-                console.log(`[AuthContext] #${fetchId} Loading finished`);
             }
         }
     }, []);
@@ -85,90 +108,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         let mounted = true;
 
-        // Fail-safe to prevent indefinite Loading screen
         failSafeTimerRef.current = setTimeout(() => {
-            if (mounted && loading) {
-                console.warn('[AuthContext] Loading fail-safe triggered after 5s');
-                setLoading(false);
+            if (mounted) {
+                setAuthState(prev => prev.loading ? { ...prev, loading: false } : prev);
             }
         }, 5000);
 
         const handleAuth = async (sess: Session | null) => {
             if (!mounted) return;
-            console.log('[AuthContext] Processing auth state:', sess?.user?.id || 'none');
 
-            setSession(sess);
-            setUser(sess?.user ?? null);
+            const newUser = sess?.user ?? null;
 
-            if (sess?.user) {
-                await fetchProfile(sess.user.id);
+            // Step 1: Update Auth State
+            setAuthState(prev => ({
+                ...prev,
+                session: sess,
+                user: newUser,
+                loading: newUser ? true : false,
+                profile: newUser ? prev.profile : null
+            }));
+
+            // Step 2: Fetch Profile if user exists
+            if (newUser) {
+                await fetchProfile(newUser.id);
             } else {
-                // CRITICAL: Clear state in correct order before setting loading to false
-                setUser(null);
-                setProfile(null);
-                clearFailSafe(); // Clear timer
-                setLoading(false);
-                console.log('[AuthContext] No user, state cleared, loading finished');
+                clearFailSafe();
             }
         };
 
-        // Get initial session
         supabase.auth.getSession().then(({ data: { session: sess } }) => {
-            console.log('[AuthContext] getSession returned');
             handleAuth(sess);
-        }).catch(err => {
-            console.error('[AuthContext] getSession error:', err);
-            if (mounted) setLoading(false);
+        }).catch(() => {
+            if (mounted) setAuthState(prev => ({ ...prev, loading: false }));
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-            console.log('[AuthContext] onAuthStateChange:', _event);
             handleAuth(sess);
         });
-
-        // Realtime Profile Listener: Keep profile in sync without manual refreshes
-        // This is guarded by the change detection in setProfile (called via fetchProfile or direct set)
-        const profileChannel = supabase.channel(`profile-sync-${Math.random()}`)
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'profiles'
-            }, (payload) => {
-                if (payload.new.id === user?.id) {
-                    console.log('[AuthContext] Realtime profile update received:', payload.new);
-                    setProfile(prev => {
-                        if (JSON.stringify(prev) === JSON.stringify(payload.new)) return prev;
-                        return payload.new as Profile;
-                    });
-                }
-            })
-            .subscribe();
 
         return () => {
             mounted = false;
             if (failSafeTimerRef.current) clearTimeout(failSafeTimerRef.current);
             subscription.unsubscribe();
-            supabase.removeChannel(profileChannel);
         };
-    }, [user?.id]);
+    }, [fetchProfile]);
 
     const signOut = useCallback(async () => {
-        setLoading(true);
+        setAuthState(prev => ({ ...prev, loading: true }));
         await supabase.auth.signOut();
-        setProfile(null);
-        setLoading(false);
+        setAuthState({
+            user: null,
+            session: null,
+            profile: null,
+            loading: false,
+            error: null
+        });
     }, []);
 
     const refreshProfile = useCallback(async () => {
-        if (user) {
-            setLoading(true);
-            await fetchProfile(user.id);
+        if (userRef.current) {
+            setAuthState(prev => ({ ...prev, loading: true }));
+            await fetchProfile(userRef.current.id);
         }
-    }, [user, fetchProfile]);
+    }, [fetchProfile]);
 
-    const value = React.useMemo(() => ({
-        user, session, profile, loading, error, signOut, refreshProfile
-    }), [user, session, profile, loading, error, signOut, refreshProfile]);
+    const value = useMemo(() => ({
+        user: authState.user,
+        session: authState.session,
+        profile: authState.profile,
+        loading: authState.loading,
+        error: authState.error,
+        signOut,
+        refreshProfile
+    }), [
+        authState.user,
+        authState.session,
+        authState.profile,
+        authState.loading,
+        authState.error,
+        signOut,
+        refreshProfile
+    ]);
 
     return (
         <AuthContext.Provider value={value}>
