@@ -78,6 +78,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log(`[AuthContext] #${fetchId} Success:`, data);
 
                 setAuthState(prev => {
+                    // Immediate Return Rule: If org_id hasn't changed, skip update to prevent loops
+                    if (prev.profile && data && prev.profile.org_id === (data as any).org_id && !prev.loading) {
+                        console.log('[AuthContext] org_id unchanged, skipping state update to prevent loop');
+                        return prev;
+                    }
+
                     const isUnchanged = JSON.stringify(prev.profile) === JSON.stringify(data);
                     if (isUnchanged && !prev.loading) return prev;
 

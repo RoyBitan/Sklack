@@ -20,9 +20,13 @@ const ManagerDashboard: React.FC = () => {
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
 
-    if (loading) {
-        return <LoadingSpinner message="טוען נתונים..." />;
-    }
+    const filteredTasks = React.useMemo(() => tasks.filter(t => {
+        const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
+        const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            t.vehicle?.plate.includes(searchQuery) ||
+            t.vehicle?.model.includes(searchQuery);
+        return matchesStatus && matchesSearch;
+    }), [tasks, statusFilter, searchQuery]);
 
     const getStatusLabel = (s: TaskStatus) => {
         switch (s) {
@@ -50,13 +54,9 @@ const ManagerDashboard: React.FC = () => {
         completed: tasks.filter(t => t.status === TaskStatus.COMPLETED).length,
     };
 
-    const filteredTasks = React.useMemo(() => tasks.filter(t => {
-        const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
-        const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            t.vehicle?.plate.includes(searchQuery) ||
-            t.vehicle?.model.includes(searchQuery);
-        return matchesStatus && matchesSearch;
-    }), [tasks, statusFilter, searchQuery]);
+    if (loading) {
+        return <LoadingSpinner message="טוען נתונים..." />;
+    }
 
     return (
         <div className="space-y-8 md:space-y-12 animate-fade-in-up">

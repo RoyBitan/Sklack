@@ -85,7 +85,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }, { onConflict: 'user_id, token_json' });
 
           if (error) console.warn('[Push] DB store failed:', error);
-          else console.log('[Push] Token registered successfully');
+          else {
+            console.log('[Push] Token registered successfully');
+            // RULE: Never trigger refreshProfile() here to avoid redirection collisions.
+          }
         }
       } catch (e) {
         console.warn('[Push] Registration background task failed silently:', e);

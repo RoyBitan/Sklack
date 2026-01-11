@@ -17,11 +17,6 @@ const CustomerDashboard: React.FC = () => {
         addProposal, updateUser, submitCheckIn, addVehicle, removeVehicle
     } = useData();
     const [processingId, setProcessingId] = useState<string | null>(null);
-
-    if (loading || !user) {
-        return <LoadingSpinner message="טוען לוח בקרה..." />;
-    }
-
     const [showRequestForm, setShowRequestForm] = useState<string | null>(null);
     const [requestText, setRequestText] = useState('');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -48,6 +43,10 @@ const CustomerDashboard: React.FC = () => {
         faultDescription: '',
         preferredPayment: 'creditCard'
     });
+
+    if (loading || !user) {
+        return <LoadingSpinner message="טוען לוח בקרה..." />;
+    }
 
     // RLS ensures 'tasks' only contains records relevant to this customer (own tasks or vehicle tasks)
     const myTasks = tasks;

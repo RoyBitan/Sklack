@@ -12,10 +12,6 @@ const TeamDashboard: React.FC = () => {
     const { tasks, loading } = useData();
     const [view, setView] = useState<'MY_TASKS' | 'OPEN' | 'HISTORY'>('MY_TASKS');
 
-    if (loading || !user) {
-        return <LoadingSpinner message="טוען לוח בקרה..." />;
-    }
-
     // Filter tasks assigned to me that are IN_PROGRESS
     const activeTasks = React.useMemo(() =>
         tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.IN_PROGRESS),
@@ -37,6 +33,10 @@ const TeamDashboard: React.FC = () => {
         [tasks, user?.id]);
 
     const hasActiveTask = activeTasks.length > 0;
+
+    if (loading || !user) {
+        return <LoadingSpinner message="טוען לוח בקרה..." />;
+    }
 
     return (
         <div className="pb-20 space-y-4 md:space-y-6">
