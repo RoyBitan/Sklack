@@ -12,7 +12,10 @@ import SettingsView from './SettingsView';
 import VehiclesView from './VehiclesView';
 import NotificationsView from './NotificationsView';
 import AppointmentsView from './AppointmentsView';
+import GarageView from './GarageView';
 import LoadingSpinner from './LoadingSpinner';
+import TaskDetailsView from './TaskDetailsView';
+import RequestDetailsView from './RequestDetailsView';
 import { UserRole, MembershipStatus } from '../types';
 
 export const AuthGuard: React.FC = () => {
@@ -53,6 +56,9 @@ export const AuthGuard: React.FC = () => {
             case 'NOTIFICATIONS': return <NotificationsView />;
             case 'APPOINTMENTS': return <AppointmentsView />;
             case 'VEHICLES': return <VehiclesView />;
+            case 'GARAGE': return <GarageView />;
+            case 'TASK_DETAIL': return <TaskDetailsView />;
+            case 'REQUEST_DETAIL': return <RequestDetailsView />;
             case 'DASHBOARD':
             default:
                 if (profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER) {
@@ -64,6 +70,11 @@ export const AuthGuard: React.FC = () => {
                 return <CustomerDashboard />;
         }
     };
+
+    // If it's a detail view, render without Layout to avoid scrolling overlaps
+    if (activeView === 'TASK_DETAIL' || activeView === 'REQUEST_DETAIL') {
+        return renderView();
+    }
 
     return <Layout>{renderView()}</Layout>;
 };

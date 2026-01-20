@@ -1,10 +1,59 @@
-const CACHE_NAME = 'sklack-push-cache-v1';
+const CACHE_NAME = 'sklack-static-v1';
+const ASSETS_TO_CACHE = [
+    '/',
+    '/index.html',
+    '/manifest.json',
+    '/pwa-192x192.png',
+    '/pwa-512x512.png'
+];
+
 self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.addAll(ASSETS_TO_CACHE);
+        })
+    );
     self.skipWaiting();
 });
+
 self.addEventListener('activate', event => {
-    event.waitUntil(clients.claim());
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    if (cacheName !== CACHE_NAME) {
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        })
+    );
+    self.claim();
 });
+
+// Fetch with Stale-While-Revalidate Strategy
+self.addEventListener('fetch', event => {
+    // Only cache GET requests and non-API requests
+    if (event.request.method !== 'GET' || event.request.url.includes('/supabase.co/')) {
+        return;
+    }
+
+    event.respondWith(
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.match(event.request).then(response => {
+                const fetchPromise = fetch(event.request).then(networkResponse => {
+                    cache.put(event.request, networkResponse.clone());
+                    return networkResponse;
+                }).catch(() => {
+                    // Fallback to cache if network fails
+                    return response;
+                });
+                return response || fetchPromise;
+            });
+        })
+    );
+});
+
 // 1. Listen for Push Events
 self.addEventListener('push', event => {
     if (!event.data) return;
@@ -33,19 +82,18 @@ self.addEventListener('push', event => {
         console.error('Push payload error:', err);
     }
 });
+
 // 2. Handle Notification Clicks
 self.addEventListener('notificationclick', event => {
     event.notification.close();
     const urlToOpen = new URL(event.notification.data.url || '/', self.location.origin).href;
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-            // If window is already open, focus it and navigate
             for (const client of windowClients) {
                 if (client.url === urlToOpen && 'focus' in client) {
                     return client.focus();
                 }
             }
-            // Otherwise open a new window
             if (clients.openWindow) {
                 return clients.openWindow(urlToOpen);
             }

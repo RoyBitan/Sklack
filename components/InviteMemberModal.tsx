@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Users, Shield } from 'lucide-react';
+import { X, Send, Phone, MessageCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface InviteMemberModalProps {
     onClose: () => void;
@@ -8,27 +9,70 @@ interface InviteMemberModalProps {
 
 const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ onClose }) => {
     const { profile } = useAuth();
-    const [copied, setCopied] = useState(false);
+    const [phone, setPhone] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState(false);
 
-    const handleCopy = () => {
-        if (profile?.org_id) {
-            navigator.clipboard.writeText(profile.org_id);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+    const handleInvite = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!phone.trim() || !profile?.org_id) return;
+
+        setLoading(true);
+        setError('');
+
+        try {
+            // Create invitation in database
+            const { error: inviteError } = await supabase
+                .from('invitations')
+                .insert({
+                    phone: phone.trim(),
+                    org_id: profile.org_id,
+                    invited_by: profile.id,
+                    status: 'PENDING'
+                });
+
+            if (inviteError) {
+                if (inviteError.code === '23505') {
+                    throw new Error('הזמנה למספר זה כבר נשלחה');
+                }
+                throw inviteError;
+            }
+
+            setSuccess(true);
+            setTimeout(() => {
+                onClose();
+            }, 1500);
+        } catch (err: any) {
+            setError(err.message || 'שגיאה בשליחת ההזמנה');
+        } finally {
+            setLoading(false);
         }
+    };
+
+    const handleWhatsAppInvite = () => {
+        if (!profile?.organization?.garage_code) return;
+
+        const message = encodeURIComponent(
+            `היי! 🎉\n\n` +
+            `הוזמנת להצטרף למוסך ${profile.organization.name}!\n\n` +
+            `📱 קוד המוסך: ${profile.organization.garage_code}\n\n` +
+            `הורד את האפליקציה והזן את הקוד כדי להתחיל לעבוד.`
+        );
+        const whatsappUrl = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${message}`;
+        window.open(whatsappUrl, '_blank');
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-fade-in-up">
             <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden relative">
-                {/* Decorative */}
                 <div className="absolute top-0 left-0 w-full h-2 bg-black"></div>
 
                 <div className="p-8">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h2 className="text-3xl font-black text-gray-900 tracking-tighter">הזמן חבר צוות</h2>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-2">שתף את מזהה המוסך</p>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-2">הזן מספר טלפון</p>
                         </div>
                         <button
                             onClick={onClose}
@@ -38,42 +82,67 @@ const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ onClose }) => {
                         </button>
                     </div>
 
-                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 flex flex-col items-center text-center gap-6 mb-8 relative overflow-hidden">
-                        <div className="w-20 h-20 bg-white text-black rounded-[1.5rem] flex items-center justify-center shadow-xl">
-                            <Shield size={40} />
-                        </div>
-
+                    <form onSubmit={handleInvite} className="space-y-6">
                         <div>
-                            <div className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3">מזהה המוסך שלך (Garage ID)</div>
-                            <div className="font-mono text-2xl font-black text-gray-900 tracking-widest break-all">
-                                {profile?.org_id}
+                            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                                מספר טלפון
+                            </label>
+                            <div className="relative">
+                                <Phone className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                <input
+                                    type="tel"
+                                    required
+                                    className="input-premium h-14 pr-12 text-lg"
+                                    placeholder="050-1234567"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    dir="ltr"
+                                />
                             </div>
                         </div>
 
-                        <div className="w-full h-full absolute inset-0 border-2 border-black/5 rounded-[2rem] pointer-events-none"></div>
-                    </div>
-
-                    <button
-                        onClick={handleCopy}
-                        className={`btn-primary w-full flex items-center justify-center gap-4 text-lg py-5 transition-all ${copied ? 'bg-green-600 hover:bg-green-700 shadow-green-200' : ''}`}
-                    >
-                        {copied ? (
-                            <>
-                                <Check size={24} />
-                                <span>הועתק בהצלחה!</span>
-                            </>
-                        ) : (
-                            <>
-                                <Copy size={24} />
-                                <span>העתק מזהה</span>
-                            </>
+                        {error && (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                                <p className="text-red-600 text-sm font-bold">{error}</p>
+                            </div>
                         )}
-                    </button>
 
-                    <p className="text-center text-xs text-gray-400 mt-6 font-bold leading-relaxed">
-                        שלח את המזהה לעובד שלך ובקש ממנו להזין אותו<br />
-                        במסך ההרשמה תחת "הצטרפות למוסך קיים".
-                    </p>
+                        {success && (
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                                <p className="text-green-600 text-sm font-bold">ההזמנה נשלחה בהצלחה!</p>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                type="submit"
+                                disabled={loading || !phone.trim()}
+                                className="btn-primary flex-1 flex items-center justify-center gap-2 py-4"
+                            >
+                                <Send size={20} />
+                                <span>{loading ? 'שולח...' : 'שלח הזמנה'}</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleWhatsAppInvite}
+                                disabled={!phone.trim()}
+                                className="bg-green-500 hover:bg-green-600 text-white rounded-xl px-6 py-4 font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                            >
+                                <MessageCircle size={20} />
+                                <span>WhatsApp</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                        <p className="text-xs text-blue-900 font-bold leading-relaxed">
+                            💡 קוד המוסך שלך: <span className="font-mono text-lg">{profile?.organization?.garage_code}</span>
+                        </p>
+                        <p className="text-xs text-blue-600 mt-2 leading-relaxed">
+                            העובד יוכל להצטרף עם מספר הטלפון שלו ויקבל גישה אוטומטית
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

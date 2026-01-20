@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowLeft, Briefcase, Users, User } from 'lucide-react';
+import { Mail, Lock, LogIn, UserPlus, AlertCircle, ArrowLeft, Briefcase, Users, User, Phone } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import SklackLogo from './SklackLogo';
 import { UserRole } from '../types';
@@ -9,32 +9,100 @@ const Auth: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [fullName, setFullName] = useState('');
+    const [phone, setPhone] = useState('');
     const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.SUPER_MANAGER);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
+    const [isFormValid, setIsFormValid] = useState(false);
+
+    const handleBlur = (field: string) => {
+        setTouched(prev => ({ ...prev, [field]: true }));
+    };
+
+    // Dynamic Validation Logic
+    const validate = () => {
+        if (isLogin) {
+            setIsFormValid(email.length > 0 && password.length > 0);
+            return;
+        }
+
+        const errors: Record<string, string> = {};
+
+        // Name: Hebrew/English only, min 2
+        const nameRegex = /^[a-zA-Z\u0590-\u05FF\s]+$/;
+        if (fullName.trim().length < 2) {
+            errors.fullName = 'השם חייב להכיל לפחות 2 תווים';
+        } else if (!nameRegex.test(fullName.trim())) {
+            errors.fullName = 'השם יכול להכיל אותיות בלבד (עברית/אנגלית)';
+        }
+
+        // Phone: Israeli/International, digits/plus/minus
+        const phoneRegex = /^(\+?\d{1,4}[- ]?)?\d{2,3}[- ]?\d{7,8}$/;
+        const cleanPhone = phone.replace(/[- ]/g, '');
+        if (!phone) {
+            errors.phone = 'חובה להזין מספר טלפון';
+        } else if (!phoneRegex.test(phone) || cleanPhone.length < 9) {
+            errors.phone = 'מספר טלפון לא תקין';
+        }
+
+        // Email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+            errors.email = 'כתובת אימייל לא תקינה';
+        }
+
+        // Password: min 8, letter + number
+        const passRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+        if (!passRegex.test(password)) {
+            errors.password = 'הסיסמה חייבת להיות באורך 8 תווים ולכלול אות ומספר';
+        }
+
+        // Confirm Password
+        if (password !== confirmPassword) {
+            errors.confirmPassword = 'הסיסמאות אינן תואמות';
+        }
+
+        setFieldErrors(errors);
+        setIsFormValid(Object.keys(errors).length === 0);
+    };
+
+    // Run validation on changes
+    React.useEffect(() => {
+        validate();
+    }, [email, password, confirmPassword, fullName, phone, isLogin]);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setMessage('');
+
+        if (!isFormValid) return;
+
         setLoading(true);
+
+        const sanitizedEmail = email.trim();
+        const sanitizedName = fullName.trim();
 
         try {
             if (isLogin) {
                 const { error: authError } = await supabase.auth.signInWithPassword({
-                    email,
+                    email: sanitizedEmail,
                     password,
                 });
                 if (authError) throw authError;
             } else {
                 const { data, error: authError } = await supabase.auth.signUp({
-                    email,
+                    email: sanitizedEmail,
                     password,
                     options: {
                         data: {
-                            full_name: fullName,
-                            role: selectedRole
+                            full_name: sanitizedName,
+                            role: selectedRole,
+                            phone: phone.trim()
                         }
                     }
                 });
@@ -84,13 +152,13 @@ const Auth: React.FC = () => {
 
                 <div className="flex bg-gray-100 p-2 rounded-[1.8rem] mb-10 border border-gray-200/30 relative z-10">
                     <button
-                        onClick={() => { setIsLogin(true); setError(''); setMessage(''); }}
+                        onClick={() => { setIsLogin(true); setError(''); setMessage(''); setTouched({}); }}
                         className={`flex-1 flex items-center justify-center gap-3 h-14 rounded-2xl font-black transition-all duration-300 ${isLogin ? 'bg-white text-black shadow-xl scale-[1.02]' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                         <LogIn size={20} /> כניסה
                     </button>
                     <button
-                        onClick={() => { setIsLogin(false); setError(''); setMessage(''); }}
+                        onClick={() => { setIsLogin(false); setError(''); setMessage(''); setTouched({}); }}
                         className={`flex-1 flex items-center justify-center gap-3 h-14 rounded-2xl font-black transition-all duration-300 ${!isLogin ? 'bg-white text-black shadow-xl scale-[1.02]' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                         <UserPlus size={20} /> הרשמה
@@ -114,11 +182,35 @@ const Auth: React.FC = () => {
                                 <input
                                     type="text"
                                     required
-                                    className="input-premium"
+                                    className={`input-premium ${fieldErrors.fullName && touched.fullName ? 'border-red-500 bg-red-50/10' : ''}`}
                                     placeholder="ישראל ישראלי"
                                     value={fullName}
                                     onChange={e => setFullName(e.target.value)}
+                                    onBlur={() => handleBlur('fullName')}
                                 />
+                                {fieldErrors.fullName && touched.fullName && !isLogin && (
+                                    <p className="text-[10px] font-bold text-red-500 mt-2 px-2 text-start">{fieldErrors.fullName}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 mb-2 px-2 uppercase tracking-widest text-start">מספר נייד</label>
+                                <div className="relative">
+                                    <input
+                                        type="tel"
+                                        required
+                                        className={`input-premium text-left ltr ${fieldErrors.phone && touched.phone ? 'border-red-500 bg-red-50/10' : ''}`}
+                                        style={{ direction: 'ltr' }}
+                                        placeholder="050-0000000"
+                                        value={phone}
+                                        onChange={e => setPhone(e.target.value)}
+                                        onBlur={() => handleBlur('phone')}
+                                    />
+                                    <Phone className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
+                                </div>
+                                {fieldErrors.phone && touched.phone && !isLogin && (
+                                    <p className="text-[10px] font-bold text-red-500 mt-2 px-2 text-start">{fieldErrors.phone}</p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -129,13 +221,17 @@ const Auth: React.FC = () => {
                             <input
                                 type="email"
                                 required
-                                className="input-premium ltr pr-16"
+                                className={`input-premium ltr pr-16 ${fieldErrors.email && touched.email && !isLogin ? 'border-red-500 bg-red-50/10' : ''}`}
                                 placeholder="name@company.com"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
+                                onBlur={() => handleBlur('email')}
                             />
                             <Mail className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
                         </div>
+                        {fieldErrors.email && touched.email && !isLogin && (
+                            <p className="text-[10px] font-bold text-red-500 mt-2 px-2 text-start">{fieldErrors.email}</p>
+                        )}
                     </div>
 
                     <div>
@@ -144,15 +240,39 @@ const Auth: React.FC = () => {
                             <input
                                 type="password"
                                 required
-                                minLength={6}
-                                className="input-premium ltr pr-16"
+                                className={`input-premium ltr pr-16 ${fieldErrors.password && touched.password && !isLogin ? 'border-red-500 bg-red-50/10' : ''}`}
                                 placeholder="••••••••"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
+                                onBlur={() => handleBlur('password')}
                             />
                             <Lock className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
                         </div>
+                        {fieldErrors.password && touched.password && !isLogin && (
+                            <p className="text-[10px] font-bold text-red-500 mt-2 px-2 text-start">{fieldErrors.password}</p>
+                        )}
                     </div>
+
+                    {!isLogin && (
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 mb-2 px-2 uppercase tracking-widest text-start">אימות סיסמה</label>
+                            <div className="relative">
+                                <input
+                                    type="password"
+                                    required
+                                    className={`input-premium ltr pr-16 ${fieldErrors.confirmPassword && touched.confirmPassword ? 'border-red-500 bg-red-50/10' : ''}`}
+                                    placeholder="••••••••"
+                                    value={confirmPassword}
+                                    onChange={e => setConfirmPassword(e.target.value)}
+                                    onBlur={() => handleBlur('confirmPassword')}
+                                />
+                                <Lock className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
+                            </div>
+                            {fieldErrors.confirmPassword && touched.confirmPassword && (
+                                <p className="text-[10px] font-bold text-red-500 mt-2 px-2 text-start">{fieldErrors.confirmPassword}</p>
+                            )}
+                        </div>
+                    )}
 
                     {error && (
                         <div className="bg-red-50 text-red-600 p-5 rounded-[1.5rem] flex items-start gap-4 border border-red-100 animate-shake">
@@ -169,8 +289,8 @@ const Auth: React.FC = () => {
 
                     <button
                         type="submit"
-                        disabled={loading}
-                        className="btn-primary w-full flex items-center justify-center gap-4 text-xl py-5 tracking-tight group"
+                        disabled={loading || !isFormValid}
+                        className={`btn-primary w-full flex items-center justify-center gap-4 text-xl py-5 tracking-tight group disabled:opacity-50 disabled:cursor-not-allowed disabled:grayscale-[0.5]`}
                     >
                         {loading ? (
                             <div className="w-6 h-6 border-3 border-white/20 border-t-white rounded-full animate-spin"></div>

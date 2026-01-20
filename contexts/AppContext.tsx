@@ -12,6 +12,10 @@ interface AppContextType {
   t: (key: string) => string;
   isRTL: boolean;
   user: any;
+  selectedTaskId: string | null;
+  setSelectedTaskId: (id: string | null) => void;
+  selectedRequestId: string | null;
+  setSelectedRequestId: (id: string | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -20,6 +24,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { profile } = useAuth();
   const [language, setLanguage] = useState<Language>(Language.HEBREW);
   const [activeView, setActiveView] = useState<AppView>('DASHBOARD');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const hasAttemptedPushRef = React.useRef(false);
 
   const isRTL = [Language.HEBREW].includes(language);
@@ -114,8 +120,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const value = useMemo(() => ({
     language, activeView, navigateTo, switchLanguage, t, isRTL,
-    user: profile
-  }), [language, activeView, navigateTo, switchLanguage, t, isRTL, profile]);
+    user: profile,
+    selectedTaskId, setSelectedTaskId,
+    selectedRequestId, setSelectedRequestId
+  }), [language, activeView, navigateTo, switchLanguage, t, isRTL, profile, selectedTaskId, selectedRequestId]);
 
   return (
     <AppContext.Provider value={value}>

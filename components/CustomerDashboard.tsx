@@ -1,48 +1,118 @@
 import React, { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useData } from '../contexts/DataContext';
-import { ProposalStatus, TaskStatus, UserRole, PreCheckInData, Vehicle } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { ProposalStatus, TaskStatus, UserRole, PreCheckInData, Vehicle, Task, MembershipStatus } from '../types';
 import {
     Check, X, CreditCard, Phone, AlertCircle, Camera, Mic, PlusCircle,
     Upload, FileText, Shield, UserCircle2, DollarSign, Square, Car,
     MapPin, Calendar, Clock, Sparkles, CheckCircle2, ArrowRight, Trash2, Plus,
-    ChevronRight, Settings, Star, Search, Filter
+    ChevronRight, Settings, Star, Search, Filter, Link, UserMinus, Mail, LogOut, ChevronUp, ChevronDown, RefreshCcw
 } from 'lucide-react';
+import { formatLicensePlate, cleanLicensePlate, sanitize } from '../utils/formatters';
+import { compressImage, uploadAsset } from '../utils/assetUtils';
+import { fetchVehicleDataFromGov, isValidIsraeliPlate } from '../utils/vehicleApi';
+import { normalizePhone, isValidPhone } from '../utils/phoneUtils';
 import LoadingSpinner from './LoadingSpinner';
+
+import VehicleCard from './VehicleCard';
+import CustomerTaskCard from './CustomerTaskCard';
 
 const CustomerDashboard: React.FC = () => {
     const { user, t, navigateTo } = useApp();
-    const {
-        tasks, vehicles, loading, updateTaskStatus, updateProposal,
-        addProposal, updateUser, submitCheckIn, addVehicle, removeVehicle
-    } = useData();
+    const { profile, user: authUser } = useAuth();
+    const { tasks, loading, deleteTask, refreshData, approveTask, updateTask, submitCheckIn, hasMoreTasks, loadMoreTasks, vehicles, updateTaskStatus, updateProposal, addProposal, updateUser, addVehicle, removeVehicle } = useData();
     const [processingId, setProcessingId] = useState<string | null>(null);
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [showRequestForm, setShowRequestForm] = useState<string | null>(null);
     const [requestText, setRequestText] = useState('');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [hasAudio, setHasAudio] = useState(false);
+    const [requestPhoto, setRequestPhoto] = useState<File | null>(null);
 
     // Vehicle Modal State
     const [showAddVehicle, setShowAddVehicle] = useState(false);
-    const [newVehicle, setNewVehicle] = useState<Omit<Vehicle, 'addedAt'>>({
+    const [loadingApi, setLoadingApi] = useState(false);
+    const [showVehicleSelect, setShowVehicleSelect] = useState(false);
+    const [garagePhone, setGaragePhone] = useState<string | null>(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+    const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({
         plate: '',
         model: '',
         year: '',
-        color: ''
+        color: '',
+        vin: '',
+        fuel_type: '',
+        engine_model: '',
+        registration_valid_until: '',
+        kodanit: ''
     });
 
-    // Pre-CheckIn Form State
+    // Check-In / Appointment Form State
     const [showCheckIn, setShowCheckIn] = useState<Vehicle | null>(null);
     const [checkInForm, setCheckInForm] = useState<Partial<PreCheckInData>>({
-        fullName: user?.full_name || '',
-        phone: user?.phone || '',
-        mileage: '',
-        carCode: '',
-        address: '',
+        ownerName: '',
+        ownerPhone: '',
+        ownerEmail: '',
+        ownerAddress: '',
+        currentMileage: '',
+        serviceTypes: [],
         faultDescription: '',
-        preferredPayment: 'creditCard'
+        paymentMethod: 'CREDIT_CARD',
+        appointmentDate: '',
+        appointmentTime: ''
     });
+
+    // Fetch Garage Phone & Redirect Logic
+    React.useEffect(() => {
+        if (!user) return;
+
+        // Redirect if not connected (optional guard, user might be on onboarding)
+        if (!profile?.org_id) {
+            // We won't force redirect here to avoid loops if they are just browsing, 
+            // but we will show the "Connect" button prominently.
+        }
+
+        const fetchPhone = async () => {
+            if (profile?.org_id) {
+                // Try to find a manager for this org
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('phone')
+                    .eq('org_id', profile.org_id)
+                    .in('role', ['SUPER_MANAGER', 'DEPUTY_MANAGER'])
+                    .limit(1)
+                    .single();
+                if (data?.phone) setGaragePhone(data.phone);
+            }
+        };
+        fetchPhone();
+    }, [profile?.org_id, user]);
+
+    // Auto-fill form when vehicle is selected (only if NOT editing)
+    React.useEffect(() => {
+        if (showCheckIn && user && !editingTaskId) {
+            setCheckInForm({
+                ownerName: user.full_name || '',
+                ownerPhone: user.phone || '',
+                ownerEmail: authUser?.email || '', // Auto-fill email from auth user
+                ownerAddress: user.address || '', // Auto-fill address
+                currentMileage: '',
+                serviceTypes: [],
+                faultDescription: '',
+                paymentMethod: 'CREDIT_CARD',
+                appointmentDate: '',
+                appointmentTime: '',
+                vehicleModel: showCheckIn.model,
+                vehicleYear: showCheckIn.year || '',
+                vehicleColor: showCheckIn.color || ''
+            });
+        }
+    }, [showCheckIn, user, authUser, editingTaskId]);
 
     if (loading || !user) {
         return <LoadingSpinner message="טוען לוח בקרה..." />;
@@ -50,7 +120,25 @@ const CustomerDashboard: React.FC = () => {
 
     // RLS ensures 'tasks' only contains records relevant to this customer (own tasks or vehicle tasks)
     const myTasks = tasks;
-    const myVehicles = user?.vehicles || [];
+    // Use vehicles from DataContext which is refreshed after addVehicle
+    const myVehicles = vehicles;
+
+    const handleDisconnect = async () => {
+        if (confirm('האם אתה בטוח שברצונך להתנתק מהמוסך הנוכחי? הקשר שלך למוסך יבוטל ותצטרך להצטרף מחדש.')) {
+            try {
+                // Clear org_id and status to sever the link
+                await updateUser(user.id, {
+                    org_id: null,
+                    membership_status: MembershipStatus.PENDING
+                });
+                // Redirect to root/onboarding
+                window.location.href = '/';
+            } catch (e) {
+                console.error(e);
+                alert('שגיאה בתהליך ההתנתקות. נסה שנית.');
+            }
+        }
+    };
 
     const handlePay = (taskId: string) => {
         setProcessingId(taskId);
@@ -65,60 +153,190 @@ const CustomerDashboard: React.FC = () => {
         updateProposal(taskId, proposalId, { status: accepted ? ProposalStatus.APPROVED : ProposalStatus.REJECTED });
     };
 
-    const submitCustomerRequest = (taskId: string) => {
+    const submitCustomerRequest = async (taskId: string, photoFile?: File) => {
         if (!requestText) return;
-        // Removed 'status' from the proposal object as it's omitted in the type definition 
-        // and handled internally by addProposal in AppContext.
-        addProposal(taskId, {
-            taskId,
-            createdBy: user!.id,
-            creatorRole: UserRole.CUSTOMER,
-            description: requestText,
-            photoData: capturedImage || undefined,
-            audioData: hasAudio ? 'mock_audio_data' : undefined,
-        });
-        setShowRequestForm(null);
-        setRequestText('');
-        setCapturedImage(null);
-        setHasAudio(false);
-    };
 
-    const handleDocUpload = (type: 'carLicense' | 'insurance' | 'idCard') => {
-        const mockData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-        updateUser(user!.id, {
-            documents: {
-                ...(user?.documents || {}),
-                [type]: mockData
+        try {
+            setIsSubmitting(true);
+            let photoUrl = null;
+            if (photoFile) {
+                const compressed = await compressImage(photoFile, 1200, 1200, 0.6);
+                const fileExt = photoFile.name.split('.').pop() || 'jpg';
+                const filePath = `tasks/${taskId}/request-${Date.now()}.${fileExt}`;
+                photoUrl = await uploadAsset(compressed, 'tasks', filePath);
             }
-        });
-        alert(t('upload') + " " + t(type === 'carLicense' ? 'carLicense' : type === 'insurance' ? 'insuranceDoc' : 'idCardDoc') + " בהצלחה!");
+
+            await addProposal(taskId, {
+                description: requestText,
+                photo_url: photoUrl
+            });
+
+            setShowRequestForm(null);
+            setRequestText('');
+            setCapturedImage(null);
+        } catch (err) {
+            console.error('Request submission failed:', err);
+            alert('שליחת הבקשה נכשלה');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
-    const handleAddVehicleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newVehicle.plate || !newVehicle.model) return;
-        addVehicle(newVehicle);
-        setShowAddVehicle(false);
-        setNewVehicle({ plate: '', model: '', year: '', color: '' });
+    const handleDocUpload = async (type: 'carLicense' | 'insurance' | 'idCard', file: File) => {
+        try {
+            setIsSubmitting(true);
+            const compressed = await compressImage(file, 1200, 1200, 0.7);
+            const fileExt = file.name.split('.').pop() || 'jpg';
+            const filePath = `${user!.id}/${type}-${Date.now()}.${fileExt}`;
+
+            const publicUrl = await uploadAsset(compressed, 'documents', filePath);
+
+            await updateUser(user!.id, {
+                documents: {
+                    ...(user?.documents || {}),
+                    [type]: publicUrl
+                }
+            });
+            alert(t('upload') + " " + t(type === 'carLicense' ? 'carLicense' : type === 'insurance' ? 'insuranceDoc' : 'idCardDoc') + " בהצלחה!");
+        } catch (err) {
+            console.error('Doc upload failed', err);
+            alert('העלאה נכשלה');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
-    const handleCheckInSubmit = (e: React.FormEvent) => {
+    const handleAddVehicleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!showCheckIn) return;
+        if (!newVehicle.plate || !newVehicle.model) {
+            alert('אנא הזן מספר רישוי ולחץ על כפתור הקסם כדי לטעון את פרטי הרכב לפני השמירה');
+            return;
+        }
 
-        const fullData: PreCheckInData = {
-            ...(checkInForm as any),
-            vehiclePlate: showCheckIn.plate,
-            vehicleModel: showCheckIn.model,
-            vehicleYear: showCheckIn.year || '',
-            vehicleColor: showCheckIn.color || '',
-            submittedAt: Date.now(),
-            hasInsurance: true
+        const cleanedPlate = cleanLicensePlate(newVehicle.plate);
+        if (cleanedPlate.length < 7) {
+            alert('מספר רישוי לא תקין (דרושות 7-8 ספרות)');
+            return;
+        }
+
+        // Convert DD/MM/YYYY to YYYY-MM-DD for Supabase DATE column
+        const formatForDb = (dateStr?: string) => {
+            if (!dateStr) return null;
+            // Check if it matches DD/MM/YYYY
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                const [day, month, year] = parts;
+                return `${year}-${month}-${day}`;
+            }
+            return dateStr; // Fallback (might already be ISO or empty)
         };
 
-        submitCheckIn(fullData);
-        setShowCheckIn(null);
-        alert(t('checkInSuccess'));
+        try {
+            const { error } = await supabase.from('vehicles').insert({
+                org_id: profile.org_id,
+                owner_id: user?.id,
+                owner_name: sanitize(user?.full_name),
+                plate: cleanedPlate,
+                model: sanitize(newVehicle.model),
+                year: sanitize(newVehicle.year),
+                color: sanitize(newVehicle.color),
+                vin: sanitize(newVehicle.vin),
+                fuel_type: sanitize(newVehicle.fuel_type),
+                engine_model: sanitize(newVehicle.engine_model),
+                registration_valid_until: formatForDb(newVehicle.registration_valid_until),
+                kodanit: sanitize(newVehicle.kodanit)
+            });
+
+            if (error) throw error;
+            await refreshData();
+            setNewVehicle({
+                plate: '', model: '', year: '', color: '',
+                vin: '', fuel_type: '', engine_model: '',
+                registration_valid_until: '', kodanit: ''
+            });
+            setShowAddVehicle(false);
+        } catch (error) {
+            console.error('Error adding vehicle:', error);
+            alert('שגיאה בשמירת הרכב. אנא בדוק את הנתונים ונסה שנית.');
+        }
+    };
+
+    const handleCheckInSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!showCheckIn || isSubmitting) return;
+
+        setIsSubmitting(true);
+
+        // Validation
+        const normalizedPhone = normalizePhone(checkInForm.ownerPhone);
+        if (!isValidPhone(normalizedPhone)) {
+            alert('מספר טלפון לא תקין (דרושות 10 ספרות)');
+            setIsSubmitting(false);
+            return;
+        }
+
+        if (!checkInForm.ownerName.trim()) {
+            alert('נא להזין שם מלא');
+            setIsSubmitting(false);
+            return;
+        }
+
+        try {
+            const fullData: PreCheckInData = {
+                ...checkInForm,
+                ownerName: sanitize(checkInForm.ownerName),
+                ownerPhone: normalizePhone(checkInForm.ownerPhone),
+                faultDescription: sanitize(checkInForm.faultDescription),
+                vehiclePlate: showCheckIn.plate,
+                vehicleModel: showCheckIn.model,
+                vehicleYear: showCheckIn.year || '',
+                vehicleColor: showCheckIn.color || '',
+                submittedAt: Date.now(),
+                hasInsurance: true
+            } as PreCheckInData;
+
+            if (editingTaskId) {
+                const isAppointment = !!fullData.appointmentDate;
+                const title = isAppointment
+                    ? `Appointment Request: ${fullData.serviceTypes?.join(', ') || 'General'}`
+                    : `Check-In: ${fullData.faultDescription || 'General Checkup'}`;
+
+                await updateTask(editingTaskId, {
+                    title: title,
+                    description: fullData.faultDescription || null,
+                    metadata: {
+                        ...fullData,
+                        type: isAppointment ? 'APPOINTMENT_REQUEST' : 'CHECK_IN',
+                        paymentMethod: fullData.paymentMethod
+                    }
+                });
+                setEditingTaskId(null);
+            } else {
+                await submitCheckIn(fullData);
+            }
+
+            setShowCheckIn(null);
+            setShowSuccessModal(true);
+            setTimeout(() => setShowSuccessModal(false), 3000);
+            await refreshData();
+        } catch (err) {
+            console.error('Submit failed:', err);
+            alert('פעולה נכשלה. אנא נסה שוב.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleEditTask = (task: Task) => {
+        // Prepare form data from task metadata
+        if (task.metadata) {
+            setCheckInForm({
+                ...checkInForm, // keep stable defaults
+                ...task.metadata
+            });
+        }
+        setEditingTaskId(task.id);
+        setShowCheckIn(task.vehicle || null);
     };
 
     return (
@@ -131,22 +349,46 @@ const CustomerDashboard: React.FC = () => {
                         <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">שלום, {user?.full_name?.split?.(' ')?.[0] || 'לקוח'}</h1>
                         <p className="text-gray-400 font-bold max-w-sm leading-relaxed text-base md:text-lg">כאן תוכל לנהל את רכביך, לעקוב אחר טיפולים ולבצע צ'ק-אין מהיר.</p>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/10 flex items-center gap-4 shadow-xl">
-                        <Shield className="text-blue-400" size={28} />
-                        <div className="text-start">
-                            <div className="text-[10px] font-black uppercase text-blue-300 tracking-widest mb-0.5">מוסך פעיל</div>
-                            <div className="font-black text-lg">מחובר ומאובטח</div>
-                        </div>
+                    <div className="flex gap-2">
+                        {profile?.organization?.name && (
+                            <div className="bg-white/10 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/10 flex items-center gap-4 shadow-xl">
+                                <Shield className="text-emerald-400" size={28} />
+                                <div className="text-start">
+                                    <div className="text-[10px] font-black uppercase text-emerald-300 tracking-widest mb-0.5">מוסך פעיל</div>
+                                    <div className="font-black text-lg">{profile.organization.name}</div>
+                                </div>
+                            </div>
+                        )}
+                        <button onClick={handleDisconnect} title="התנתק מהמוסך" className="bg-white/10 backdrop-blur-xl p-4 rounded-2xl border border-white/10 hover:bg-red-500/20 hover:border-red-500/50 transition-all text-white shadow-xl">
+                            <LogOut size={24} />
+                        </button>
                     </div>
                 </div>
             </div>
+
+            {(!user?.phone || !user?.address) && !localStorage.getItem('dismissedProfileBanner') && (
+                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 flex justify-between items-center animate-fade-in-up">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-orange-100 p-3 rounded-xl text-orange-600">
+                            <UserCircle2 size={24} />
+                        </div>
+                        <div className="text-start">
+                            <div className="font-black text-gray-900 text-lg">הפרופיל שלך לא מלא</div>
+                            <div className="text-sm text-gray-500">השלם פרטים אישיים כדי לחסוך זמן בצ'ק-אין</div>
+                        </div>
+                    </div>
+                    <button onClick={() => { localStorage.setItem('dismissedProfileBanner', 'true'); navigateTo('SETTINGS'); }} className="bg-orange-500 text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-orange-600 transition-all shadow-lg active:scale-95">
+                        השלם פרטים
+                    </button>
+                </div>
+            )}
 
             {/* MY VEHICLES SECTION - Prominent multiple car support */}
             <section className="space-y-6">
                 <div className="flex items-center justify-between px-4">
                     <h3 className="font-black text-2xl text-gray-900 tracking-tight flex items-center gap-3">
                         <Car size={26} className="text-blue-600" />
-                        רכבים שלי ({myVehicles.length})
+                        הרכבים שלי ({myVehicles.length})
                     </h3>
                     <button
                         onClick={() => setShowAddVehicle(true)}
@@ -157,36 +399,18 @@ const CustomerDashboard: React.FC = () => {
                 </div>
 
                 {myVehicles.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {myVehicles.map(v => (
-                            <div key={v.plate} className="bg-white border-2 border-gray-100 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="text-start">
-                                        <div className="bg-yellow-400 border-2 border-black rounded-lg px-3 py-1.5 inline-block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] mb-3 group-hover:-translate-y-1 transition-transform">
-                                            <span className="font-mono text-xs font-black tracking-widest text-black">{v.plate}</span>
-                                        </div>
-                                        <h4 className="font-black text-xl text-gray-900">{v.model}</h4>
-                                        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">{v.year} • {v.color}</p>
-                                    </div>
-                                    <button onClick={() => removeVehicle(v.plate)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                                        <Trash2 size={20} />
-                                    </button>
-                                </div>
-                                <div className="flex gap-2 pt-4 border-t border-gray-50">
-                                    <button
-                                        onClick={() => setShowCheckIn(v)}
-                                        className="flex-1 bg-blue-600 text-white py-3.5 rounded-xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md active:scale-95"
-                                    >
-                                        <Sparkles size={16} /> צ'ק-אין מהיר
-                                    </button>
-                                    <button
-                                        onClick={() => navigateTo('APPOINTMENTS')}
-                                        className="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl text-[11px] font-black uppercase flex items-center justify-center gap-2 hover:bg-gray-200 transition-all active:scale-95"
-                                    >
-                                        <Calendar size={16} /> הזמן תור
-                                    </button>
-                                </div>
-                            </div>
+                            <VehicleCard
+                                key={v.plate}
+                                vehicle={v}
+                                onDelete={() => {
+                                    if (confirm(t('deleteVehicleConfirm') || 'Are you sure you want to delete this vehicle?')) {
+                                        removeVehicle(v.plate);
+                                    }
+                                }}
+                                onCheckIn={() => setShowCheckIn(v)}
+                            />
                         ))}
                     </div>
                 ) : (
@@ -202,281 +426,359 @@ const CustomerDashboard: React.FC = () => {
                             <PlusCircle size={20} /> רשום רכב ראשון
                         </button>
                     </div>
-                )}
-            </section>
+                )
+                }
+            </section >
 
             {/* ADD VEHICLE MODAL */}
             {showAddVehicle && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 md:p-10 shadow-2xl animate-fade-in-up relative">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black flex items-center gap-3 text-gray-900">
-                                <PlusCircle className="text-blue-600" size={28} />
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250] flex items-center justify-center p-2 sm:p-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white w-[95%] max-w-lg rounded-[2.5rem] shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
+                        {/* Header */}
+                        <div className="p-6 pb-2 flex items-center justify-between border-b border-gray-50">
+                            <h2 className="text-xl sm:text-2xl font-black flex items-center gap-3 text-gray-900 text-start">
+                                <Sparkles className="text-blue-600" size={24} />
                                 רישום רכב חדש
                             </h2>
-                            <button onClick={() => setShowAddVehicle(false)} className="text-gray-400 hover:text-black transition-colors"><X size={28} /></button>
-                        </div>
-                        <form onSubmit={handleAddVehicleSubmit} className="space-y-6">
-                            <div className="group">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1 group-focus-within:text-black transition-colors">מספר רישוי</label>
-                                <input required className="w-full h-16 bg-gray-50 border-2 border-gray-100 rounded-2xl px-6 font-mono text-xl tracking-widest text-center focus:bg-white focus:border-black outline-none transition-all shadow-sm" value={newVehicle.plate} onChange={e => setNewVehicle({ ...newVehicle, plate: e.target.value })} placeholder="00-000-00" />
-                            </div>
-                            <div className="group">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1 group-focus-within:text-black transition-colors">דגם רכב</label>
-                                <input required className="w-full h-16 bg-gray-50 border-2 border-gray-100 rounded-2xl px-6 font-bold focus:bg-white focus:border-black outline-none transition-all shadow-sm" value={newVehicle.model} onChange={e => setNewVehicle({ ...newVehicle, model: e.target.value })} placeholder="למשל: טויוטה קורולה" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="group">
-                                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">שנת ייצור</label>
-                                    <input className="w-full h-16 bg-gray-50 border-2 border-gray-100 rounded-2xl px-6 font-bold focus:bg-white focus:border-black outline-none transition-all" value={newVehicle.year} onChange={e => setNewVehicle({ ...newVehicle, year: e.target.value })} placeholder="2024" />
-                                </div>
-                                <div className="group">
-                                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">צבע</label>
-                                    <input className="w-full h-16 bg-gray-50 border-2 border-gray-100 rounded-2xl px-6 font-bold focus:bg-white focus:border-black outline-none transition-all" value={newVehicle.color} onChange={e => setNewVehicle({ ...newVehicle, color: e.target.value })} placeholder="לבן" />
-                                </div>
-                            </div>
-                            <button type="submit" className="w-full h-18 bg-black text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-gray-900 active:scale-[0.98] transition-all mt-4 flex items-center justify-center gap-3">
-                                <Plus size={24} /> הוסף רכב למוסך שלי
+                            <button
+                                onClick={() => setShowAddVehicle(false)}
+                                className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                            >
+                                <X size={20} />
                             </button>
-                        </form>
+                        </div>
+
+                        {/* Scrollable Content */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                            <form onSubmit={handleAddVehicleSubmit} className="space-y-6">
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-1 text-start">מספר רישוי</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            required
+                                            className="w-full h-16 bg-gray-50 border-2 border-gray-100 rounded-2xl px-6 font-mono text-xl sm:text-2xl tracking-widest text-center focus:bg-white focus:border-black outline-none transition-all shadow-sm"
+                                            value={newVehicle.plate}
+                                            onChange={e => setNewVehicle({ ...newVehicle, plate: formatLicensePlate(e.target.value) })}
+                                            placeholder="00-000-00"
+                                        />
+                                        <button
+                                            type="button"
+                                            disabled={loadingApi}
+                                            onClick={async () => {
+                                                const plate = cleanLicensePlate(newVehicle.plate || '');
+                                                if (!isValidIsraeliPlate(plate)) return alert('מספר לא תקין');
+                                                setLoadingApi(true);
+                                                try {
+                                                    const data = await fetchVehicleDataFromGov(plate);
+                                                    if (data) {
+                                                        const formatDate = (dateStr: string) => {
+                                                            if (!dateStr) return '';
+                                                            const date = new Date(dateStr);
+                                                            if (isNaN(date.getTime())) return dateStr;
+                                                            return date.toLocaleDateString('en-GB');
+                                                        };
+
+                                                        setNewVehicle({
+                                                            ...newVehicle,
+                                                            model: `${data.make} ${data.model}`,
+                                                            year: data.year || '',
+                                                            color: data.color || '',
+                                                            vin: data.vin || '',
+                                                            fuel_type: data.fuelType || '',
+                                                            engine_model: data.engineModel || '',
+                                                            registration_valid_until: formatDate(data.registrationValidUntil)
+                                                        });
+                                                    } else {
+                                                        alert('לא נמצאו נתונים לרכב זה. אנא נסה שנית או הזן ידנית.');
+                                                    }
+                                                } catch (e) {
+                                                    alert('שגיאה בטעינת נתונים');
+                                                } finally {
+                                                    setLoadingApi(false);
+                                                }
+                                            }}
+                                            className="bg-black text-white px-5 rounded-2xl hover:bg-gray-800 disabled:bg-gray-400 transition-all flex items-center justify-center shrink-0"
+                                        >
+                                            {loadingApi ? <Sparkles size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 flex items-center justify-between">
+                                    <div className="text-start">
+                                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">יצרן, מודל, שנה</div>
+                                        {newVehicle.model ? (
+                                            <div className="text-lg sm:text-xl font-black text-black tracking-tight">
+                                                {newVehicle.model} {newVehicle.year ? `(${newVehicle.year})` : ''}
+                                            </div>
+                                        ) : (
+                                            <div className="text-gray-400 text-sm italic">
+                                                לחץ על כפתור הקסם כדי לטעון פרטי רכב...
+                                            </div>
+                                        )}
+                                    </div>
+                                    <CheckCircle2 className={newVehicle.model ? 'text-green-500' : 'text-gray-200'} size={32} />
+                                </div>
+
+                                <button type="button" onClick={() => setShowVehicleSelect(!showVehicleSelect)} className="w-full flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition-colors">
+                                    <span className="font-black text-xs text-gray-700">פרטים נוספים (קודנית, מנוע ועוד)</span>
+                                    <ChevronRight className={`transition-transform ${showVehicleSelect ? 'rotate-90' : ''}`} size={20} />
+                                </button>
+
+                                {showVehicleSelect && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in-up bg-gray-50/50 p-6 rounded-3xl border border-dashed border-gray-200 text-start">
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 px-1 uppercase tracking-widest">אימובילייזר / קודנית</label>
+                                            <input className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 font-mono text-center shadow-sm" value={newVehicle.kodanit || ''} onChange={e => setNewVehicle({ ...newVehicle, kodanit: e.target.value })} placeholder="1234" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 px-1 uppercase tracking-widest">צבע חיצוני</label>
+                                            <input className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 shadow-sm" value={newVehicle.color || ''} onChange={e => setNewVehicle({ ...newVehicle, color: e.target.value })} placeholder="לבן" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 px-1 uppercase tracking-widest">סוג דלק</label>
+                                            <input className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 shadow-sm" value={newVehicle.fuel_type || ''} onChange={e => setNewVehicle({ ...newVehicle, fuel_type: e.target.value })} placeholder="בנזין / דיזל" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 px-1 uppercase tracking-widest">תוקף טסט</label>
+                                            <input className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 shadow-sm text-left font-mono" style={{ direction: 'ltr' }} value={newVehicle.registration_valid_until || ''} onChange={e => setNewVehicle({ ...newVehicle, registration_valid_until: e.target.value })} placeholder="DD/MM/YYYY" />
+                                        </div>
+                                        <div className="sm:col-span-2 space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 px-1 uppercase tracking-widest">דגם מנוע</label>
+                                            <input className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 shadow-sm font-mono text-xs uppercase" value={newVehicle.engine_model || ''} onChange={e => setNewVehicle({ ...newVehicle, engine_model: e.target.value })} placeholder="G4FC" />
+                                        </div>
+                                        <div className="sm:col-span-2 space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 px-1 uppercase tracking-widest">VIN / שלדה</label>
+                                            <input className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 font-mono text-xs shadow-sm uppercase" value={newVehicle.vin || ''} onChange={e => setNewVehicle({ ...newVehicle, vin: e.target.value })} placeholder="1G1FJ..." />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <button type="submit" className="w-full h-16 sm:h-20 bg-black text-white py-5 rounded-[2rem] font-black text-lg sm:text-xl shadow-2xl hover:bg-gray-900 active:scale-[0.98] transition-all flex items-center justify-center gap-3">
+                                    <CheckCircle2 size={24} /> שמור רכב
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}
-
+            {/* CHECK-IN FORM MODAL */}
             {/* CHECK-IN FORM MODAL */}
             {showCheckIn && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 border-[3px] border-blue-600 shadow-2xl animate-fade-in-up space-y-10 my-8 text-start">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <h2 className="text-3xl font-black flex items-center gap-3 text-gray-900">
-                                    <FileText className="text-blue-600" size={32} />
-                                    צ'ק-אין עבור {showCheckIn.model}
-                                </h2>
-                                <p className="text-gray-400 font-bold text-sm mt-1 uppercase tracking-widest">מספר רישוי: {showCheckIn.plate}</p>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250] flex items-center justify-center p-2 sm:p-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white w-[95%] max-w-2xl rounded-[2.5rem] shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden border-t-[12px] border-blue-600">
+                        {/* Header */}
+                        <div className="p-6 pb-2 flex items-center justify-between border-b border-gray-50 bg-white">
+                            <div className="text-start">
+                                <h1 className="text-xl sm:text-2xl font-black flex items-center gap-3 text-gray-900">
+                                    <Sparkles className="text-blue-600" size={24} />
+                                    {editingTaskId ? 'עריכת פרטי תור' : "צ'ק-אין / הזמנת תור"}
+                                </h1>
+                                <p className="text-gray-400 font-bold text-[10px] sm:text-xs mt-1 uppercase tracking-widest">{showCheckIn.model} | {formatLicensePlate(showCheckIn.plate)}</p>
                             </div>
-                            <button onClick={() => setShowCheckIn(null)} className="text-gray-400 hover:text-black transition-colors"><X size={32} /></button>
+                            <button
+                                onClick={() => { setShowCheckIn(null); setEditingTaskId(null); }}
+                                className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
                         </div>
 
-                        <form onSubmit={handleCheckInSubmit} className="space-y-8">
-                            <div className="space-y-5">
-                                <h3 className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em] px-2">{t('personalDetails')}</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Scrollable Content */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                            <form id="check-in-form" onSubmit={handleCheckInSubmit} className="space-y-8">
+                                {/* Personal Details Section */}
+                                <div className="space-y-5">
+                                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-1 text-start">פרטי בעל הרכב</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="relative">
+                                            <input required className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pl-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder="שם מלא" value={checkInForm.ownerName} onChange={e => setCheckInForm({ ...checkInForm, ownerName: e.target.value })} />
+                                            <UserCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                        </div>
+                                        <div className="relative">
+                                            <input required className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pl-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder="טלפון" value={checkInForm.ownerPhone} onChange={e => setCheckInForm({ ...checkInForm, ownerPhone: e.target.value })} />
+                                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                        </div>
+                                        <div className="relative">
+                                            <input className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pl-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder="דואר אלקטרוני" type="email" value={checkInForm.ownerEmail} onChange={e => setCheckInForm({ ...checkInForm, ownerEmail: e.target.value })} />
+                                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold" size={20} />
+                                        </div>
+                                        <div className="relative">
+                                            <input className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pl-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder="כתובת מגורים" value={checkInForm.ownerAddress} onChange={e => setCheckInForm({ ...checkInForm, ownerAddress: e.target.value })} />
+                                            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                        </div>
+                                    </div>
+                                    {(!checkInForm.ownerName || !checkInForm.ownerPhone) && (
+                                        <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-xl text-[10px] font-bold">
+                                            <AlertCircle size={14} />
+                                            <span>חסרים פרטים אישיים. וודא שהם מעודכנים בתיק הלקוח.</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Vehicle Details Section */}
+                                <div className="space-y-4">
+                                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-1 text-start">קילומטראז' נוכחי</div>
                                     <div className="relative">
-                                        <input required className="w-full bg-gray-100 border-2 border-transparent rounded-2xl p-5 pl-14 text-sm font-black shadow-inner focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder={t('fullName')} value={checkInForm.fullName} onChange={e => setCheckInForm({ ...checkInForm, fullName: e.target.value })} />
-                                        <UserCircle2 className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={24} />
-                                    </div>
-                                    <div className="relative">
-                                        <input required className="w-full bg-gray-100 border-2 border-transparent rounded-2xl p-5 pl-14 text-sm font-black shadow-inner focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder={t('phone')} value={checkInForm.phone} onChange={e => setCheckInForm({ ...checkInForm, phone: e.target.value })} />
-                                        <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={24} />
+                                        <input type="number" className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pl-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder="הזן קילומטראז'..." value={checkInForm.currentMileage || ''} onChange={e => setCheckInForm({ ...checkInForm, currentMileage: e.target.value })} />
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-black text-xs">KM</div>
                                     </div>
                                 </div>
-                                <div className="relative">
-                                    <input className="w-full bg-gray-100 border-2 border-transparent rounded-2xl p-5 pl-14 text-sm font-black shadow-inner focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder={t('address')} value={checkInForm.address} onChange={e => setCheckInForm({ ...checkInForm, address: e.target.value })} />
-                                    <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={24} />
+
+                                {/* Service Type Selection */}
+                                <div className="space-y-4">
+                                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-1 text-start">סוג שירות מבוקש</div>
+                                    <div className="border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
+                                        <details className="group" open>
+                                            <summary className="flex items-center justify-between p-5 cursor-pointer hover:bg-gray-50 transition-colors list-none">
+                                                <span className="font-bold text-gray-700 text-sm">
+                                                    {(checkInForm.serviceTypes?.length || 0) > 0 ? `נבחרו ${checkInForm.serviceTypes?.length} שירותים` : 'בחר שירותים לרכב...'}
+                                                </span>
+                                                <ChevronDown className="transform transition-transform group-open:rotate-180 text-gray-400" size={20} />
+                                            </summary>
+                                            <div className="p-4 bg-white border-t border-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {[
+                                                    { id: 'ROUTINE_SERVICE', label: 'טיפול תקופתי' },
+                                                    { id: 'DIAGNOSTICS', label: 'אבחון תקלה' },
+                                                    { id: 'BRAKES', label: 'בלמים' },
+                                                    { id: 'TIRES', label: 'צמיגים / פנצ\'ר' },
+                                                    { id: 'BATTERY', label: 'מצבר / חשמל' },
+                                                    { id: 'AIR_CONDITIONING', label: 'מיזוג אוויר' },
+                                                    { id: 'TEST_PREP', label: 'הכנה לטסט' },
+                                                    { id: 'OTHER', label: 'אחר (פרט למטה)' },
+                                                ].map((service) => (
+                                                    <label key={service.id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${(checkInForm.serviceTypes || []).includes(service.id) ? 'border-blue-500 bg-blue-50/50 text-blue-700' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}>
+                                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${(checkInForm.serviceTypes || []).includes(service.id) ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 bg-white'}`}>
+                                                            {(checkInForm.serviceTypes || []).includes(service.id) && <Check size={12} strokeWidth={4} />}
+                                                        </div>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="hidden"
+                                                            checked={(checkInForm.serviceTypes || []).includes(service.id)}
+                                                            onChange={() => {
+                                                                setCheckInForm(prev => {
+                                                                    const services = (prev.serviceTypes || []).includes(service.id)
+                                                                        ? (prev.serviceTypes || []).filter(s => s !== service.id)
+                                                                        : [...(prev.serviceTypes || []), service.id];
+                                                                    return { ...prev, serviceTypes: services };
+                                                                });
+                                                            }}
+                                                        />
+                                                        <span className="font-black text-[11px]">{service.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </details>
+                                    </div>
+                                    {(checkInForm.serviceTypes || []).includes('OTHER') && (
+                                        <div className="animate-fade-in">
+                                            <textarea
+                                                className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-5 text-sm font-medium focus:bg-white focus:border-blue-600 outline-none transition-all h-24 resize-none"
+                                                placeholder="פרט את הבעיה או הבקשה..."
+                                                value={checkInForm.faultDescription || ''}
+                                                onChange={e => setCheckInForm({ ...checkInForm, faultDescription: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
 
-                            <div className="space-y-5">
-                                <h3 className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em] px-2">נתוני נסיעה</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <input required className="w-full bg-gray-100 border-2 border-transparent rounded-2xl p-5 text-sm font-black shadow-inner focus:bg-white focus:border-blue-600 outline-none" placeholder={t('mileage')} value={checkInForm.mileage} onChange={e => setCheckInForm({ ...checkInForm, mileage: e.target.value })} />
-                                    <input required className="w-full bg-red-50 border-2 border-red-100 rounded-2xl p-5 text-sm font-black shadow-inner focus:bg-white focus:border-red-500 outline-none text-red-900" placeholder={t('carCode')} value={checkInForm.carCode} onChange={e => setCheckInForm({ ...checkInForm, carCode: e.target.value })} />
-                                </div>
-                            </div>
-
-                            <div className="space-y-6">
-                                <h3 className="text-[12px] font-black text-blue-600 uppercase tracking-[0.2em] px-2">מהות הביקור</h3>
-                                <textarea required className="w-full bg-gray-100 border-2 border-transparent rounded-2xl p-6 text-sm font-bold shadow-inner h-28 focus:bg-white focus:border-blue-600 outline-none transition-all" placeholder={t('faultDescription')} value={checkInForm.faultDescription} onChange={e => setCheckInForm({ ...checkInForm, faultDescription: e.target.value })} />
-
-                                <div>
-                                    <label className="block text-[11px] font-black text-gray-500 mb-3 uppercase tracking-widest px-2">{t('preferredPayment')}</label>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                        {[
-                                            { id: 'cash', label: t('cash') },
-                                            { id: 'creditCard', label: t('creditCard') },
-                                            { id: 'bit', label: t('bit') },
-                                            { id: 'bankTransfer', label: t('bankTransfer') }
-                                        ].map(p => (
-                                            <button
-                                                key={p.id}
-                                                type="button"
-                                                onClick={() => setCheckInForm({ ...checkInForm, preferredPayment: p.id })}
-                                                className={`py-4 rounded-2xl text-[11px] font-black border-2 transition-all shadow-sm ${checkInForm.preferredPayment === p.id ? 'bg-black border-black text-white scale-[1.03]' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400'}`}
-                                            >
-                                                {p.label}
-                                            </button>
-                                        ))}
+                                {/* Schedule Appointment Section */}
+                                <div className="space-y-4">
+                                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-1 text-start">מועד מבוקש (אופציונלי)</div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-gray-400 px-2 uppercase tracking-widest">תאריך</label>
+                                            <input
+                                                type="date"
+                                                className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-4 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none"
+                                                value={checkInForm.appointmentDate}
+                                                onChange={e => setCheckInForm({ ...checkInForm, appointmentDate: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-gray-400 px-2 uppercase tracking-widest">שעה</label>
+                                            <input
+                                                type="time"
+                                                className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-4 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none"
+                                                value={checkInForm.appointmentTime}
+                                                onChange={e => setCheckInForm({ ...checkInForm, appointmentTime: e.target.value })}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <button type="submit" className="w-full bg-blue-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl hover:bg-blue-700 hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
-                                <CheckCircle2 size={28} />
-                                שלח פרטים ותפוס תור בקבלה
+                                {/* Preferred Payment Method */}
+                                <div className="space-y-4">
+                                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-1 text-start">צורת תשלום מועדפת</div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        <button type="button" onClick={() => setCheckInForm({ ...checkInForm, paymentMethod: 'CREDIT_CARD' })} className={`p-4 rounded-xl border-2 font-black flex flex-col items-center gap-2 transition-all ${checkInForm.paymentMethod === 'CREDIT_CARD' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-50 bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                                            <CreditCard size={20} /> <span className="text-[10px]">כרטיס אשראי</span>
+                                        </button>
+                                        <button type="button" onClick={() => setCheckInForm({ ...checkInForm, paymentMethod: 'CASH' })} className={`p-4 rounded-xl border-2 font-black flex flex-col items-center gap-2 transition-all ${checkInForm.paymentMethod === 'CASH' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-50 bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                                            <DollarSign size={20} /> <span className="text-[10px]">מזומן</span>
+                                        </button>
+                                        <button type="button" onClick={() => setCheckInForm({ ...checkInForm, paymentMethod: 'OTHER' })} className={`p-4 rounded-xl border-2 font-black flex flex-col items-center gap-2 transition-all ${checkInForm.paymentMethod === 'OTHER' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-50 bg-gray-50 text-gray-400 hover:bg-gray-100'} col-span-2 sm:col-span-1`}>
+                                            <Sparkles size={20} /> <span className="text-[10px]">אמצעי אחר</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-6 bg-gray-50/50 border-t border-gray-100">
+                            <button
+                                type="submit"
+                                form="check-in-form"
+                                disabled={isSubmitting}
+                                className={`w-full h-16 sm:h-20 ${isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-3xl font-black text-lg shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3`}
+                            >
+                                <span>{isSubmitting ? 'מעדכן...' : (editingTaskId ? 'עדכן פרטים' : "בצע צ'ק-אין עכשיו")}</span>
+                                {isSubmitting ? (
+                                    <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <CheckCircle2 size={24} />
+                                )}
                             </button>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}
-
-            {/* Documents Section */}
-            <section className="bg-white rounded-[2.5rem] p-8 border-2 border-gray-100 shadow-sm">
-                <div className="flex items-center gap-3 mb-8 px-1">
-                    <FileText className="text-blue-500" size={24} />
-                    <h3 className="font-black text-2xl tracking-tight text-gray-900">{t('myDocuments')}</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {[
-                        { id: 'carLicense', label: t('carLicense'), icon: <Car size={22} /> },
-                        { id: 'insurance', label: t('insuranceDoc'), icon: <Shield size={22} /> },
-                        { id: 'idCard', label: t('idCardDoc'), icon: <UserCircle2 size={22} /> },
-                    ].map(doc => (
-                        <div key={doc.id} className="relative group overflow-hidden bg-gray-50 rounded-2xl p-6 border border-gray-100 flex flex-col items-center text-center transition-all hover:border-black/10 hover:bg-white hover:shadow-md">
-                            <div className={`w-14 h-14 rounded-2xl mb-4 flex items-center justify-center transition-colors ${user?.documents?.[doc.id] ? 'bg-green-100 text-green-600 shadow-sm' : 'bg-white text-gray-300 shadow-sm'}`}>
-                                {doc.icon}
-                            </div>
-                            <div className="text-sm font-black text-gray-800 mb-2">{doc.label}</div>
-                            <button
-                                onClick={() => handleDocUpload(doc.id as any)}
-                                className={`text-[11px] font-black px-6 py-2.5 rounded-full transition-all ${user?.documents?.[doc.id] ? 'bg-green-600 text-white' : 'bg-black text-white hover:bg-gray-800 shadow-md'}`}
-                            >
-                                {user?.documents?.[doc.id] ? 'הוחלף' : t('upload')}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            </section>
 
             {/* Tasks Section */}
             <section className="space-y-6">
-                <h3 className="font-black text-2xl text-gray-900 px-4 tracking-tight">הטיפולים שלי</h3>
-                {myTasks.length > 0 ? myTasks.map(task => {
-                    const pendingProposals = task.proposals?.filter(p => p.status === ProposalStatus.PENDING_CUSTOMER) || [];
+                <h3 className="font-black text-2xl text-gray-900 px-4 tracking-tight text-start flex items-center gap-3">
+                    <CheckCircle2 size={26} className="text-blue-600" />
+                    הטיפולים שלי
+                </h3>
+                {myTasks.length > 0 ? (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {myTasks.map(task => (
+                                <CustomerTaskCard
+                                    key={task.id}
+                                    task={task}
+                                    garagePhone={garagePhone}
+                                    onShowRequest={setShowRequestForm}
+                                    onCancel={(id) => deleteTask(id)}
+                                    onEdit={(task) => handleEditTask(task)}
+                                />
+                            ))}
+                        </div>
 
-                    return (
-                        <div key={task.id} className="bg-white border-2 border-gray-100 rounded-[2.5rem] p-8 md:p-10 shadow-md space-y-8 transition-all hover:shadow-xl hover:border-gray-200 text-start">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                                <div>
-                                    <div className="flex flex-wrap items-center gap-3 mb-4">
-                                        <div className="bg-yellow-400 border-[3px] border-black rounded-xl px-4 py-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                                            <span className="font-mono text-sm font-black tracking-widest text-black">{task.vehicle?.plate || '---'}</span>
-                                        </div>
-                                        <span className={`px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest shadow-sm ${task.status === TaskStatus.IN_PROGRESS ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                                            {t(task.status === TaskStatus.IN_PROGRESS ? 'inProgress' : task.status.toLowerCase())}
-                                        </span>
-                                    </div>
-                                    <h4 className="font-black text-3xl text-gray-900 tracking-tighter">{task.title}</h4>
-                                    <p className="text-gray-500 font-bold text-base mt-2 uppercase tracking-widest">{task.vehicle?.model}</p>
-                                </div>
-                                <button className="w-fit p-5 bg-gray-100 text-gray-700 rounded-2xl hover:bg-black hover:text-white transition-all shadow-md active:scale-95">
-                                    <Phone size={28} />
+                        {hasMoreTasks && (
+                            <div className="flex justify-center pt-8">
+                                <button
+                                    onClick={loadMoreTasks}
+                                    disabled={loading}
+                                    className="w-full sm:w-auto px-12 py-4 bg-white border-2 border-black rounded-2xl font-black text-sm hover:bg-black hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"
+                                >
+                                    {loading ? 'טוען...' : 'טען טיפולים נוספים'}
                                 </button>
                             </div>
-
-                            {/* Proposal Alerts */}
-                            {pendingProposals.length > 0 && (
-                                <div className="bg-orange-50 border-[3px] border-orange-200 rounded-[2.5rem] p-8 space-y-6 animate-pulse-slow">
-                                    <div className="flex items-center gap-3 text-orange-900 font-black text-lg uppercase tracking-widest">
-                                        <AlertCircle size={28} className="text-orange-600" />
-                                        דיווח מהשטח: דרוש אישור עבודה
-                                    </div>
-
-                                    {pendingProposals.map(p => (
-                                        <div key={p.id} className="bg-white rounded-[2rem] p-8 border-2 border-orange-100 shadow-lg">
-                                            <p className="text-gray-900 text-xl font-bold mb-6 leading-relaxed">{p.description}</p>
-                                            <div className="flex justify-between items-center bg-orange-50 p-6 rounded-2xl mb-8 border-2 border-orange-100 shadow-inner">
-                                                <span className="text-xs font-black text-orange-800 uppercase tracking-widest">עלות משוערת</span>
-                                                <span className="font-black text-4xl text-gray-900">₪{p.price}</span>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <button
-                                                    onClick={() => handleProposalResponse(task.id, p.id, true)}
-                                                    className="bg-green-700 text-white py-5 rounded-2xl font-black text-base shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    <Check size={20} /> {t('approve')} לביצוע
-                                                </button>
-                                                <button
-                                                    onClick={() => handleProposalResponse(task.id, p.id, false)}
-                                                    className="bg-white border-2 border-gray-200 text-gray-400 py-5 rounded-2xl font-black text-base hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    <X size={20} /> {t('reject')}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Add Customer Request Section */}
-                            {showRequestForm === task.id ? (
-                                <div className="bg-gray-900 text-white rounded-[2.5rem] p-8 md:p-10 space-y-8 animate-fade-in-up shadow-2xl">
-                                    <div className="flex justify-between items-center">
-                                        <h4 className="font-black text-base uppercase tracking-widest text-blue-400">בקשה חדשה לצוות</h4>
-                                        <button onClick={() => setShowRequestForm(null)} className="text-gray-500 hover:text-white transition-colors"><X size={28} /></button>
-                                    </div>
-                                    <textarea
-                                        className="w-full bg-white/10 border-none rounded-2xl p-6 text-lg font-bold placeholder:text-white/20 focus:ring-2 focus:ring-blue-500 outline-none h-32 transition-all shadow-inner"
-                                        placeholder="מה תרצה שנוסיף לטיפול? (למשל: נורת מנוע דולקת...)"
-                                        value={requestText}
-                                        onChange={e => setRequestText(e.target.value)}
-                                    />
-                                    <div className="flex gap-4">
-                                        <button onClick={() => setCapturedImage('mock')} className={`flex-1 p-6 rounded-2xl border-2 transition-all shadow-lg flex items-center justify-center gap-3 ${capturedImage ? 'bg-blue-600 border-blue-600' : 'border-white/10 hover:bg-white/20 text-white/60'}`}>
-                                            <Camera size={26} />
-                                            <span className="font-black text-xs uppercase tracking-widest">צרף תמונה</span>
-                                        </button>
-                                        <button onClick={() => setIsRecording(!isRecording)} className={`flex-1 p-6 rounded-2xl border-2 transition-all shadow-lg flex items-center justify-center gap-3 ${isRecording ? 'bg-red-600 border-red-600 animate-pulse' : hasAudio ? 'bg-green-600 border-green-600' : 'border-white/10 hover:bg-white/20 text-white/60'}`}>
-                                            {isRecording ? <Square size={26} /> : <Mic size={26} />}
-                                            <span className="font-black text-xs uppercase tracking-widest">הקלטת קול</span>
-                                        </button>
-                                    </div>
-                                    <button
-                                        onClick={() => submitCustomerRequest(task.id)}
-                                        className="w-full bg-white text-black py-6 rounded-2xl font-black text-lg shadow-2xl hover:bg-gray-100 active:scale-[0.98] transition-all"
-                                    >
-                                        שלח עדכון למוסך
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={() => setShowRequestForm(task.id)}
-                                    className="w-full py-6 border-[3px] border-dashed border-gray-100 rounded-[2rem] text-gray-400 font-black text-base flex items-center justify-center gap-4 hover:border-black hover:text-black hover:bg-gray-50 transition-all shadow-inner active:scale-[0.99]"
-                                >
-                                    <PlusCircle size={24} />
-                                    יש לי בקשה נוספת לטיפול
-                                </button>
-                            )}
-
-                            {/* Payment Alert */}
-                            {task.status === TaskStatus.CUSTOMER_APPROVAL && pendingProposals.length === 0 && (
-                                <div className="bg-blue-600 rounded-[2.5rem] p-10 text-white space-y-8 shadow-2xl animate-fade-in-up border-b-[8px] border-blue-900">
-                                    <div className="flex items-center gap-5">
-                                        <div className="bg-white/20 p-5 rounded-3xl shadow-inner">
-                                            <CheckCircle2 size={40} strokeWidth={3} />
-                                        </div>
-                                        <div className="text-start">
-                                            <h5 className="font-black text-xs uppercase tracking-widest text-blue-200 mb-1">העבודה הושלמה בהצלחה!</h5>
-                                            <p className="font-black text-3xl">הרכב שלך מוכן ומחכה לך</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-white/10 p-8 rounded-2xl border border-white/10 shadow-inner">
-                                        <span className="text-xs font-black text-blue-100 uppercase tracking-widest">סך הכל לתשלום</span>
-                                        <span className="text-5xl font-black">₪{task.price || 450}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => handlePay(task.id)}
-                                        disabled={!!processingId}
-                                        className="w-full bg-white text-blue-700 h-20 rounded-2xl font-black text-2xl shadow-2xl hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-4"
-                                    >
-                                        <CreditCard size={32} />
-                                        {processingId === task.id ? 'מעבד תשלום...' : 'שלם עכשיו'}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    );
-                }) : (
+                        )}
+                    </>
+                ) : (
                     <div className="text-center py-24 bg-white rounded-[3rem] border-4 border-dashed border-gray-100 shadow-inner flex flex-col items-center">
                         <div className="bg-gray-50 w-24 h-24 rounded-full flex items-center justify-center mb-6 text-gray-200">
                             <Car size={48} />
@@ -485,7 +787,96 @@ const CustomerDashboard: React.FC = () => {
                     </div>
                 )}
             </section>
-        </div>
+
+            {/* Documents Section */}
+            <section className="bg-white rounded-[2.5rem] p-8 border-2 border-gray-100 shadow-sm">
+                <div className="flex items-center gap-3 mb-8 px-1 text-start">
+                    <FileText className="text-blue-500" size={24} />
+                    <h3 className="font-black text-2xl tracking-tight text-gray-900">המסמכים שלי</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {[
+                        { id: 'carLicense', label: 'רישיון רכב', icon: <Car size={22} /> },
+                        { id: 'insurance', label: 'ביטוח חובה', icon: <Shield size={22} /> },
+                        { id: 'idCard', label: 'תעודת זהות', icon: <UserCircle2 size={22} /> },
+                    ].map(doc => (
+                        <div key={doc.id} className="relative group overflow-hidden bg-gray-50 rounded-2xl p-6 border border-gray-100 flex flex-col items-center text-center transition-all hover:border-black/10 hover:bg-white hover:shadow-md">
+                            <div className={`w-14 h-14 rounded-2xl mb-4 flex items-center justify-center transition-colors ${user?.documents?.[doc.id] ? 'bg-green-100 text-green-600 shadow-sm' : 'bg-white text-gray-300 shadow-sm'}`}>
+                                {doc.icon}
+                            </div>
+                            <div className="text-sm font-black text-gray-800 mb-2">{doc.label}</div>
+                            <label
+                                className={`text-[11px] font-black px-6 py-2.5 rounded-full cursor-pointer transition-all ${user?.documents?.[doc.id] ? 'bg-green-600 text-white' : 'bg-black text-white hover:bg-gray-800 shadow-md'}`}
+                            >
+                                {user?.documents?.[doc.id] ? 'הוחלף' : 'העלאה'}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleDocUpload(doc.id as any, file);
+                                    }}
+                                />
+                            </label>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* Request Form Modal */}
+            {showRequestForm && (
+                <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-6 animate-fade-in">
+                    <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm animate-scale-in">
+                        <h4 className="font-black text-lg mb-4">בקשה נוספת לטיפול</h4>
+                        <textarea
+                            className="w-full bg-gray-50 rounded-xl p-4 mb-4 h-32 border-2 border-transparent focus:border-blue-500 outline-none resize-none"
+                            placeholder="פרט את הבקשה שלך..."
+                            value={requestText}
+                            onChange={e => setRequestText(e.target.value)}
+                        />
+                        <div className="flex items-center gap-4 mb-6">
+                            <label className="flex-1 flex items-center justify-center gap-2 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 cursor-pointer hover:bg-gray-100 transition-all">
+                                <Camera size={20} className="text-blue-500" />
+                                <span className="text-xs font-black text-gray-500">{requestPhoto ? 'תמונה נבחרה' : 'צרף תמונה'}</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={e => setRequestPhoto(e.target.files?.[0] || null)} />
+                            </label>
+                            {requestPhoto && (
+                                <button onClick={() => setRequestPhoto(null)} className="p-4 bg-red-50 text-red-500 rounded-xl border-2 border-transparent hover:border-red-500 transition-all">
+                                    <Trash2 size={20} />
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => { setShowRequestForm(null); setRequestPhoto(null); }} className="flex-1 bg-gray-100 py-3 rounded-xl font-bold text-gray-700 hover:bg-gray-200 transition-colors">ביטול</button>
+                            <button
+                                onClick={() => showRequestForm && submitCustomerRequest(showRequestForm, requestPhoto || undefined)}
+                                disabled={isSubmitting}
+                                className={`flex-1 ${isSubmitting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} text-white py-3 rounded-xl font-bold transition-colors shadow-lg flex items-center justify-center gap-2`}
+                            >
+                                {isSubmitting && <RefreshCcw size={16} className="animate-spin" />}
+                                {isSubmitting ? 'שולח...' : 'שלח'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Success Modal */}
+            {
+                showSuccessModal && (
+                    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-2xl flex flex-col items-center text-center animate-bounce-in max-w-sm w-full">
+                            <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                                <Check size={48} strokeWidth={4} />
+                            </div>
+                            <h3 className="text-2xl font-black text-gray-900 mb-2">צ'ק-אין בוצע בהצלחה!</h3>
+                            <p className="text-gray-500 font-bold">פרטי הרכב נקלטו במערכת.</p>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 };
 

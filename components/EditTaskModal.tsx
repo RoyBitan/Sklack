@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Save, AlertCircle, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../contexts/DataContext';
 import { Priority, Task, TaskStatus } from '../types';
@@ -16,7 +17,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
 
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
-    const [priority, setPriority] = useState<Priority>(task.priority);
+    const [isUrgent, setIsUrgent] = useState(task.priority === Priority.URGENT || task.priority === Priority.CRITICAL);
     const [status, setStatus] = useState<TaskStatus>(task.status);
     const [year, setYear] = useState(task.vehicle_year || '');
     const [immobilizer, setImmobilizer] = useState(task.immobilizer_code || '');
@@ -32,7 +33,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
                 .update({
                     title,
                     description,
-                    priority,
+                    priority: isUrgent ? Priority.URGENT : Priority.NORMAL,
                     status,
                     vehicle_year: year,
                     immobilizer_code: immobilizer,
@@ -52,49 +53,50 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-6 bg-black/40 backdrop-blur-sm animate-fade-in-up">
-            <div className="bg-white w-full max-w-2xl rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-[90vh] md:h-auto md:max-h-[90vh]">
-                <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+    return createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in-up">
+            <div className="bg-white w-full h-full sm:h-auto sm:w-full sm:max-w-2xl sm:rounded-[2rem] shadow-2xl flex flex-col transition-all duration-300">
+                <div className="px-6 py-5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-white sm:rounded-t-[2rem] sticky top-0 z-10 shrink-0">
                     <div>
-                        <h2 className="text-3xl font-black text-gray-900 tracking-tighter">עריכת משימה</h2>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-1">עדכון פרטי כרטיס עבודה</p>
+                        <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tighter">עריכת משימה</h2>
+                        <p className="text-[10px] sm:text-xs font-black text-emerald-500 uppercase tracking-[0.2em] mt-1">עדכון פרטי טיפול ורכב</p>
                     </div>
-                    <button onClick={onClose} className="p-4 bg-gray-50 rounded-[1.5rem] hover:bg-black hover:text-white transition-all">
-                        <X size={24} />
+                    <button onClick={onClose} className="w-10 h-10 sm:w-14 sm:h-14 flex items-center justify-center bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all active:scale-90 touch-target">
+                        <X size={20} />
                     </button>
                 </div>
 
-                <div className="p-8 overflow-y-auto custom-scrollbar space-y-8 flex-1">
-                    <form id="edit-task-form" onSubmit={handleSubmit} className="space-y-8">
+                <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-1 pb-24 sm:pb-8">
+                    <form id="edit-task-form" onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label className="block text-[11px] font-black text-gray-400 mb-3 px-2 uppercase tracking-[0.3em] text-start">כותרת הטיפול</label>
+                            <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">כותרת הטיפול</label>
                             <input
                                 type="text"
                                 required
                                 value={title}
                                 onChange={e => setTitle(e.target.value)}
-                                className="input-premium"
+                                className="input-premium px-4 py-3 text-base rounded-xl"
                             />
                         </div>
 
                         <div className="grid grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-[11px] font-black text-gray-400 mb-3 px-2 uppercase tracking-[0.3em] text-start">שנתון רכב</label>
+                                <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">שנתון רכב</label>
                                 <input
                                     type="text"
                                     value={year}
                                     onChange={e => setYear(e.target.value)}
-                                    className="input-premium"
+                                    className="input-premium px-4 py-3 text-base rounded-xl"
                                 />
                             </div>
                             <div>
-                                <label className="block text-[11px] font-black text-gray-400 mb-3 px-2 uppercase tracking-[0.3em] text-start">קודנית</label>
+                                <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">אימובילייזר / קודנית</label>
                                 <input
                                     type="text"
                                     value={immobilizer}
                                     onChange={e => setImmobilizer(e.target.value)}
-                                    className="input-premium font-mono text-center tracking-widest"
+                                    className="input-premium px-4 py-3 text-base rounded-xl font-mono text-center tracking-widest"
+                                    placeholder="1234"
                                 />
                             </div>
                         </div>
@@ -122,22 +124,21 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
                         </div>
 
                         <div>
-                            <label className="block text-[11px] font-black text-gray-400 mb-3 px-2 uppercase tracking-[0.3em] text-start">דחיפות</label>
-                            <div className="flex bg-gray-100 p-2 rounded-[1.5rem] gap-2">
-                                {Object.values(Priority).map(p => (
-                                    <button
-                                        key={p}
-                                        type="button"
-                                        onClick={() => setPriority(p)}
-                                        className={`flex-1 py-3 rounded-xl text-xs font-black transition-all duration-300 ${priority === p
-                                            ? (p === Priority.CRITICAL ? 'bg-red-500 text-white shadow-lg' : p === Priority.URGENT ? 'bg-orange-500 text-white shadow-lg' : 'bg-black text-white shadow-lg')
-                                            : 'text-gray-400 hover:text-black'
-                                            }`}
-                                    >
-                                        {p === Priority.NORMAL ? 'רגיל' : p === Priority.URGENT ? 'דחוף' : 'קריטי'}
-                                    </button>
-                                ))}
-                            </div>
+                            <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">דחיפות</label>
+                            <label className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${isUrgent ? 'border-red-500 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
+                                <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${isUrgent ? 'border-red-500 bg-red-500 text-white' : 'border-gray-300 bg-white'}`}>
+                                    {isUrgent && <Check size={14} strokeWidth={4} />}
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={isUrgent}
+                                    onChange={e => setIsUrgent(e.target.checked)}
+                                    className="hidden"
+                                />
+                                <span className={`font-black ${isUrgent ? 'text-red-600' : 'text-gray-500'}`}>
+                                    {isUrgent ? 'דחוף מאוד' : 'רגיל'}
+                                </span>
+                            </label>
                         </div>
 
                         {error && (
@@ -149,18 +150,19 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
                     </form>
                 </div>
 
-                <div className="p-8 border-t border-gray-100 bg-white">
+                <div className="p-6 sm:p-8 border-t border-gray-100 bg-white sticky bottom-0 z-10 shrink-0 mb-safe">
                     <button
                         form="edit-task-form"
                         type="submit"
                         disabled={loading}
-                        className="btn-primary w-full flex items-center justify-center gap-3"
+                        className="btn-primary w-full flex items-center justify-center gap-3 touch-target"
                     >
                         {loading ? 'שומר...' : <><Save size={20} /> <span className="font-black text-lg">שמור שינויים</span></>}
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

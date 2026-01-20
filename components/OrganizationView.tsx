@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Building2, Plus, Users, Shield, Copy, AlertCircle, ArrowLeft, ArrowRight, LogIn, Check, X } from 'lucide-react';
+import { Building2, Plus, Users, Shield, Copy, AlertCircle, ArrowLeft, ArrowRight, LogIn, Check, X, QrCode, Phone } from 'lucide-react';
 import { UserRole, MembershipStatus } from '../types';
+import QRScanner from './QRScanner';
+import { QRCodeSVG } from 'qrcode.react';
+import { normalizePhone } from '../utils/phoneUtils';
+import { sanitize } from '../utils/formatters';
 
 interface OrganizationViewProps {
     onboarding?: boolean;
@@ -22,14 +26,32 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
     // Member Management
     const [members, setMembers] = useState<any[]>([]);
     const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+    const [invitations, setInvitations] = useState<any[]>([]);
+    const [showScanner, setShowScanner] = useState(false);
+    const [showQR, setShowQR] = useState(false);
+    const [invitePhone, setInvitePhone] = useState('');
 
     const isManager = profile?.role === UserRole.SUPER_MANAGER;
 
     useEffect(() => {
         if (profile?.org_id && !onboarding) {
             fetchMembers();
+        } else if (onboarding) {
+            fetchInvitations();
+
+            if (!selectedPath) {
+                // Priority: Registration Metadata Role > Profile Role
+                const rawRole = user?.user_metadata?.role;
+                const currentRole = rawRole || profile?.role;
+
+                if (currentRole === UserRole.SUPER_MANAGER) {
+                    setSelectedPath('create');
+                } else if (currentRole) {
+                    setSelectedPath('join');
+                }
+            }
         }
-    }, [profile?.org_id, onboarding]);
+    }, [profile?.org_id, onboarding, profile?.role, user?.user_metadata]);
 
     const fetchMembers = async () => {
         if (!profile?.org_id) return;
@@ -45,6 +67,18 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         }
     };
 
+    const fetchInvitations = async () => {
+        if (!profile?.phone) return;
+
+        const { data, error } = await supabase
+            .from('invitations')
+            .select('*, organization:organizations(name, id)')
+            .eq('phone', profile.phone)
+            .eq('status', 'PENDING');
+
+        if (data) setInvitations(data);
+    };
+
     const handleMembershipAction = async (userId: string, status: MembershipStatus) => {
         try {
             const { error } = await supabase.from('profiles').update({ membership_status: status }).eq('id', userId);
@@ -56,6 +90,51 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         }
     };
 
+    const handleInvite = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!invitePhone.trim() || !profile?.org_id) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('invitations').insert({
+                phone: normalizePhone(invitePhone),
+                org_id: profile.org_id,
+                invited_by: profile.id
+            });
+            if (error) throw error;
+            setInvitePhone('');
+            setInfoMessage('הזמנה נשלחה בהצלחה!');
+            setTimeout(() => setInfoMessage(''), 3000);
+        } catch (err: any) {
+            alert(err.message || 'שגיאה בשליחת הזמנה');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAcceptInvite = async (invite: any) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase.rpc('accept_invitation', { inv_id: invite.id });
+            if (error) throw error;
+
+            await refreshProfile();
+            window.location.reload();
+        } catch (err: any) {
+            alert(err.message || 'שגיאה בקבלת ההזמנה');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeclineInvite = async (invite: any) => {
+        try {
+            await supabase.from('invitations').update({ status: 'DECLINED' }).eq('id', invite.id);
+            fetchInvitations();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     const handleCreateOrg = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!orgName.trim() || !user) return;
@@ -64,9 +143,13 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         setError('');
 
         try {
-            const { error: rpcError } = await supabase.rpc('create_organization', { org_name: orgName });
+            const { error: rpcError } = await supabase.rpc('create_organization', { org_name: sanitize(orgName) });
             if (rpcError) throw rpcError;
             await refreshProfile();
+            // Give the profile a moment to update, then navigate to dashboard
+            setTimeout(() => {
+                window.location.reload(); // Force full reload to ensure AuthGuard re-evaluates
+            }, 500);
         } catch (err: any) {
             setError(err.message || 'כשלו ניסיונות יצירת הארגון');
             console.error(err);
@@ -79,9 +162,10 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         setError('');
         setInfoMessage('');
         try {
-            const { data } = await supabase.rpc('get_org_by_manager_phone', { phone_text: managerPhone });
+            const normalized = normalizePhone(managerPhone);
+            const { data } = await supabase.rpc('get_org_by_manager_phone', { manager_phone: normalized });
             if (data && data.length > 0) {
-                setOrgIdToJoin(data[0].org_id);
+                setOrgIdToJoin(sanitize(data[0].garage_code).toUpperCase());
                 setInfoMessage(`נמצא מוסך: ${data[0].org_name}`);
             } else {
                 setError('לא נמצא מוסך עבור מספר זה');
@@ -89,6 +173,14 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         } catch (e) {
             setError('שגיאה בחיפוש');
         }
+    };
+
+    const handleQRScan = (code: string) => {
+        console.log('[QR] Scanned code:', code);
+        setOrgIdToJoin(code.toUpperCase());
+        setShowScanner(false);
+        setInfoMessage('קוד נסרק בהצלחה!');
+        setTimeout(() => setInfoMessage(''), 3000);
     };
 
     const handleJoinOrg = async (e: React.FormEvent) => {
@@ -99,10 +191,11 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
         setError('');
 
         try {
+            const cleanedCode = sanitize(orgIdToJoin).toUpperCase();
             const { data: org, error: fetchError } = await supabase
                 .from('organizations')
                 .select('id, name')
-                .eq('id', orgIdToJoin)
+                .eq('garage_code', cleanedCode) // Changed to search by garage_code
                 .single();
 
             if (fetchError || !org) {
@@ -116,6 +209,10 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
 
             if (updateError) throw updateError;
             await refreshProfile();
+            // Give the profile a moment to update, then navigate
+            setTimeout(() => {
+                window.location.reload(); // Force full reload to ensure AuthGuard re-evaluates
+            }, 500);
         } catch (err: any) {
             setError(err.message || 'הצטרפות למוסך נכשלה. נסה שוב.');
             setLoading(false);
@@ -123,8 +220,8 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
     };
 
     const copyToClipboard = () => {
-        if (profile?.org_id) {
-            navigator.clipboard.writeText(profile.org_id);
+        if (profile?.organization?.garage_code) {
+            navigator.clipboard.writeText(profile.organization.garage_code);
             setInfoMessage('הועתק');
             setTimeout(() => setInfoMessage(''), 2000);
         }
@@ -151,29 +248,35 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <button onClick={() => setSelectedPath('join')} className="card-premium p-12 hover:scale-105 transition-all duration-300 group text-start">
-                                <div className="bg-blue-100 text-blue-600 p-8 rounded-[2rem] mb-8 inline-block group-hover:scale-110 transition-transform">
-                                    <LogIn size={48} />
-                                </div>
-                                <h3 className="text-3xl font-black mb-4 text-gray-900">הצטרף למוסך קיים</h3>
-                                <p className="text-gray-500 font-bold leading-relaxed">יש לך מזהה מוסך? הצטרף לצוות והתחל לעבוד</p>
-                                <div className="mt-8 flex items-center gap-2 text-blue-600 font-black text-sm">
-                                    <span>המשך</span>
-                                    <ArrowRight size={20} />
-                                </div>
-                            </button>
+                            {/* Show Create option ONLY for managers */}
+                            {profile?.role === UserRole.SUPER_MANAGER && (
+                                <button onClick={() => setSelectedPath('create')} className="card-premium p-12 hover:scale-105 transition-all duration-300 group text-start bg-gradient-to-br from-black to-gray-800 text-white">
+                                    <div className="bg-white/20 p-8 rounded-[2rem] mb-8 inline-block group-hover:scale-110 transition-transform">
+                                        <Plus size={48} />
+                                    </div>
+                                    <h3 className="text-3xl font-black mb-4">צור מוסך חדש</h3>
+                                    <p className="text-white/80 font-bold leading-relaxed">הפוך את המוסך שלך לדיגיטלי תוך פחות מדקה</p>
+                                    <div className="mt-8 flex items-center gap-2 font-black text-sm">
+                                        <span>התחל עכשיו</span>
+                                        <ArrowRight size={20} />
+                                    </div>
+                                </button>
+                            )}
 
-                            <button onClick={() => setSelectedPath('create')} className="card-premium p-12 hover:scale-105 transition-all duration-300 group text-start bg-gradient-to-br from-black to-gray-800 text-white">
-                                <div className="bg-white/20 p-8 rounded-[2rem] mb-8 inline-block group-hover:scale-110 transition-transform">
-                                    <Plus size={48} />
-                                </div>
-                                <h3 className="text-3xl font-black mb-4">צור מוסך חדש</h3>
-                                <p className="text-white/80 font-bold leading-relaxed">הפוך את המוסך שלך לדיגיטלי תוך פחות מדקה</p>
-                                <div className="mt-8 flex items-center gap-2 font-black text-sm">
-                                    <span>התחל עכשיו</span>
-                                    <ArrowRight size={20} />
-                                </div>
-                            </button>
+                            {/* Show Join option ONLY for non-managers (Team/Customer) */}
+                            {profile?.role !== UserRole.SUPER_MANAGER && (
+                                <button onClick={() => setSelectedPath('join')} className="card-premium p-12 hover:scale-105 transition-all duration-300 group text-start">
+                                    <div className="bg-blue-100 text-blue-600 p-8 rounded-[2rem] mb-8 inline-block group-hover:scale-110 transition-transform">
+                                        <LogIn size={48} />
+                                    </div>
+                                    <h3 className="text-3xl font-black mb-4 text-gray-900">הצטרף למוסך קיים</h3>
+                                    <p className="text-gray-500 font-bold leading-relaxed">יש לך מזהה מוסך? הצטרף לצוות והתחל לעבוד</p>
+                                    <div className="mt-8 flex items-center gap-2 text-blue-600 font-black text-sm">
+                                        <span>המשך</span>
+                                        <ArrowRight size={20} />
+                                    </div>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -184,11 +287,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
             <div className="min-h-[80vh] flex items-center justify-center p-8 animate-fade-in-up">
                 <div className="w-full max-w-2xl card-premium p-12 md:p-20 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-3 bg-black"></div>
-                    <div className="flex justify-between mb-8">
-                        <button onClick={() => setSelectedPath(null)} className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all">
-                            <ArrowLeft size={20} />
-                            <span>חזור</span>
-                        </button>
+                    <div className="flex justify-end mb-8">
                         <button onClick={signOut} className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all">
                             <ArrowLeft size={20} />
                             <span>Logout</span>
@@ -223,10 +322,66 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
                         </form>
                     ) : (
                         <form onSubmit={handleJoinOrg} className="space-y-12">
+                            {invitations.length > 0 && (
+                                <div className="space-y-4 animate-fade-in-up">
+                                    <label className="block text-[11px] font-black text-orange-400 uppercase tracking-[0.3em] px-2">יש לך הזמנות ממתינות</label>
+                                    {invitations.map(inv => (
+                                        <div key={inv.id} className="bg-orange-50 border border-orange-100 p-6 rounded-[1.5rem] flex items-center justify-between shadow-sm">
+                                            <div className="flex items-center gap-4 text-start">
+                                                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm">
+                                                    <Building2 size={24} className="text-orange-500" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-black text-gray-900">הזמנה מ {inv.organization.name}</div>
+                                                    <div className="text-[10px] text-orange-600/60 font-black uppercase tracking-widest">מזהה: {inv.org_id.substring(0, 8)}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleAcceptInvite(inv)}
+                                                    className="p-3 bg-green-500 text-white rounded-xl shadow-lg hover:scale-110 active:scale-95 transition-all"
+                                                >
+                                                    <Check size={20} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeclineInvite(inv)}
+                                                    className="p-3 bg-black text-white rounded-xl shadow-lg hover:scale-110 active:scale-95 transition-all"
+                                                >
+                                                    <X size={20} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             <div>
-                                <label className="block text-[11px] font-black text-gray-400 mb-4 px-2 uppercase tracking-[0.3em] text-start">מזהה המוסך (Garage ID)</label>
-                                <input type="text" required className="input-premium h-24 text-2xl px-10 font-mono tracking-widest" value={orgIdToJoin} onChange={e => setOrgIdToJoin(e.target.value)} />
-                                <div className="flex justify-between mt-3 px-2">
+                                <label className="block text-[11px] font-black text-gray-400 mb-4 px-2 uppercase tracking-[0.3em] text-start">קוד מוסך (Garage Code)</label>
+                                <input type="text" required className="input-premium h-24 text-2xl px-10 font-mono tracking-widest uppercase" placeholder="AB123" value={orgIdToJoin} onChange={e => setOrgIdToJoin(e.target.value.toUpperCase())} />
+
+                                {/* QR Scanner Button */}
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            console.log('[OrganizationView] Opening scanner...');
+                                            setShowScanner(true);
+                                        }}
+                                        className="w-full bg-gradient-to-r from-black to-gray-800 hover:from-black hover:to-black text-white rounded-2xl py-6 px-6 font-black flex items-center justify-center gap-4 transition-all shadow-2xl group active:scale-95"
+                                    >
+                                        <div className="bg-white/20 p-2 rounded-lg group-hover:scale-110 transition-transform">
+                                            <QrCode size={24} />
+                                        </div>
+                                        <span className="text-lg">סרוק ברקוד QR להצטרפות</span>
+                                    </button>
+                                    <p className="text-xs text-gray-400 mt-2 px-2 font-bold text-center">
+                                        או הזן את הקוד ידנית למעלה
+                                    </p>
+                                </div>
+
+                                <div className="flex justify-between mt-6 px-2">
                                     <p className="text-[10px] text-gray-400 font-bold">* בקש ממנהל המוסך את המזהה</p>
                                     <button type="button" onClick={() => setSearchMode(searchMode === 'ID' ? 'PHONE' : 'ID')} className="text-[10px] font-bold text-blue-600 underline">
                                         {searchMode === 'ID' ? 'או חפש לפי טלפון מנהל' : 'חפש לפי מזהה (ID)'}
@@ -250,6 +405,14 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
                         </form>
                     )}
                 </div>
+
+                {/* QR Scanner (Onboarding Mode) */}
+                {showScanner && (
+                    <QRScanner
+                        onScan={handleQRScan}
+                        onClose={() => setShowScanner(false)}
+                    />
+                )}
             </div>
         );
     }
@@ -280,12 +443,17 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
                     </div>
                     <div className="p-10 bg-gray-50 rounded-[2.5rem] border-2 border-dashed border-gray-100 flex flex-col md:flex-row items-center justify-between gap-8 transition-colors hover:bg-white hover:border-gray-200">
                         <div className="text-center md:text-right">
-                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] mb-3">מזהה ארגון ייחודי (Org ID)</div>
-                            <div className="font-mono text-lg font-black text-gray-400 tracking-tight">{profile?.org_id}</div>
+                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] mb-3">קוד מוסך (Garage Code)</div>
+                            <div className="font-mono text-lg font-black text-gray-400 tracking-tight">{profile?.organization?.garage_code || '---'}</div>
                         </div>
-                        <button onClick={copyToClipboard} className="px-10 h-16 bg-white text-black rounded-[1.2rem] shadow-xl border-2 border-black/5 hover:scale-110 active:scale-95 transition-all text-sm font-black flex items-center gap-4">
-                            <Copy size={20} /> {infoMessage === 'הועתק' ? 'הועתק!' : 'העתק מזהה'}
-                        </button>
+                        <div className="flex flex-wrap gap-4">
+                            <button onClick={copyToClipboard} className="px-10 h-16 bg-white text-black rounded-[1.2rem] shadow-xl border-2 border-black/5 hover:scale-110 active:scale-95 transition-all text-sm font-black flex items-center gap-4">
+                                <Copy size={20} /> {infoMessage === 'הועתק' ? 'הועתק!' : 'העתק מזהה'}
+                            </button>
+                            <button onClick={() => setShowQR(true)} className="px-10 h-16 bg-black text-white rounded-[1.2rem] shadow-xl hover:scale-110 active:scale-95 transition-all text-sm font-black flex items-center gap-4">
+                                <QrCode size={20} /> הצג קוד QR
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -319,6 +487,24 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
             <div className="card-premium p-12 overflow-hidden relative">
                 <div className="flex items-center justify-between mb-12">
                     <h3 className="text-3xl font-black flex items-center gap-6"><Shield size={36} className="text-black" /><span className="tracking-tighter">צוות ולקוחות</span></h3>
+                    {isManager && (
+                        <div className="flex gap-2">
+                            <input
+                                type="tel"
+                                placeholder="050-0000000"
+                                className="input-premium py-2 px-4 h-12 text-sm"
+                                value={invitePhone}
+                                onChange={e => setInvitePhone(e.target.value)}
+                            />
+                            <button
+                                onClick={handleInvite}
+                                disabled={loading || !invitePhone.trim()}
+                                className="bg-black text-white px-6 rounded-xl font-bold text-xs hover:scale-105 active:scale-95 transition-all"
+                            >
+                                הזמן למוסך
+                            </button>
+                        </div>
+                    )}
                 </div>
                 <div className="space-y-6">
                     {members.length === 0 ? <div className="text-center py-10 text-gray-400 font-black uppercase tracking-widest">אין חברים להצגה</div> :
@@ -337,6 +523,57 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
                     }
                 </div>
             </div>
+
+            {/* QR Scanner */}
+            {showScanner && (
+                <QRScanner
+                    onScan={handleQRScan}
+                    onClose={() => setShowScanner(false)}
+                />
+            )}
+
+            {/* QR Code Display Modal (for Managers) */}
+            {showQR && profile?.organization?.garage_code && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 text-center relative animate-fade-in-up">
+                        <button
+                            onClick={() => setShowQR(false)}
+                            className="absolute top-6 left-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className="mb-8">
+                            <div className="bg-black text-white p-4 rounded-2xl inline-block mb-4">
+                                <QrCode size={32} />
+                            </div>
+                            <h2 className="text-3xl font-black text-gray-900 tracking-tight">קוד ה-QR של המוסך</h2>
+                            <p className="text-gray-400 font-bold text-sm mt-1">{profile.organization.name}</p>
+                        </div>
+
+                        <div className="bg-white p-8 rounded-[2rem] shadow-inner border-4 border-black inline-block mb-8">
+                            <QRCodeSVG
+                                value={profile.organization.garage_code}
+                                size={200}
+                                level="H"
+                                includeMargin={false}
+                            />
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="bg-gray-50 rounded-2xl p-4">
+                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">מזהה מוסך להקלדה</div>
+                                <div className="text-2xl font-black text-black tracking-widest font-mono uppercase">
+                                    {profile.organization.garage_code}
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500 font-bold px-6 leading-relaxed">
+                                הצג קוד זה לעובדים או לקוחות חדשים כדי שיצטרפו למוסך שלך באופן מיידי
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

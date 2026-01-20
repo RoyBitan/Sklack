@@ -4,6 +4,8 @@ import { AppProvider } from './contexts/AppContext';
 import { DataProvider } from './contexts/DataContext';
 import { AuthGuard } from './components/AuthGuard';
 import PublicOrderStatus from './components/PublicOrderStatus';
+import { Toaster } from 'sonner';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const App: React.FC = () => {
     const [publicTaskId, setPublicTaskId] = useState<string | null>(null);
@@ -49,13 +51,16 @@ const App: React.FC = () => {
 
     // Normal authenticated routes
     return (
-        <AuthProvider>
-            <DataProvider>
+        <ErrorBoundary>
+            <AuthProvider>
                 <AppProvider>
-                    <AuthGuard />
+                    <DataProvider>
+                        <AuthGuard />
+                        <Toaster position="top-center" expand={true} richColors dir="rtl" />
+                    </DataProvider>
                 </AppProvider>
-            </DataProvider>
-        </AuthProvider>
+            </AuthProvider>
+        </ErrorBoundary>
     );
 };
 

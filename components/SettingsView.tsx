@@ -4,7 +4,10 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Language, UserRole } from '../types';
-import { User, Shield, Info, Globe, Bell, Lock, Mail, Bug, FileText, LogOut, ChevronRight, Edit2 } from 'lucide-react';
+import { User, Shield, Info, Globe, Bell, Lock, Mail, Bug, FileText, LogOut, ChevronRight, Edit2, Plus } from 'lucide-react';
+import { isValidPhone, normalizePhone } from '../utils/phoneUtils';
+import { sanitize } from '../utils/formatters';
+import { compressImage, uploadAsset } from '../utils/assetUtils';
 import LoadingSpinner from './LoadingSpinner';
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -21,7 +24,11 @@ const LANGUAGE_LABELS: Record<string, string> = {
 const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
     const { updateUser } = useData();
     const { refreshProfile } = useAuth();
+    const [fullName, setFullName] = useState(user?.full_name || '');
     const [phone, setPhone] = useState(user?.phone || '');
+    const [secondaryPhone, setSecondaryPhone] = useState(user?.secondary_phone || '');
+    const [showSecondary, setShowSecondary] = useState(!!user?.secondary_phone);
+    const [address, setAddress] = useState(user?.address || '');
     const [nationalId, setNationalId] = useState(user?.national_id || '');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -29,9 +36,40 @@ const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
     const handleSave = async () => {
         setLoading(true);
         setMessage(null);
+
+        // Validation
+        if (!fullName.trim()) {
+            setMessage({ type: 'error', text: 'נא להזין שם מלא' });
+            setLoading(false);
+            return;
+        }
+
+        const normalizedPhone = normalizePhone(phone);
+        if (!isValidPhone(normalizedPhone)) {
+            setMessage({ type: 'error', text: 'מספר טלפון ראשי לא תקין' });
+            setLoading(false);
+            return;
+        }
+
+        if (secondaryPhone) {
+            const normalizedSecondary = normalizePhone(secondaryPhone);
+            if (!isValidPhone(normalizedSecondary)) {
+                setMessage({ type: 'error', text: 'מספר טלפון משני לא תקין' });
+                setLoading(false);
+                return;
+            }
+        }
+
         try {
-            await updateUser(user.id, { phone, national_id: nationalId });
+            await updateUser(user.id, {
+                full_name: sanitize(fullName),
+                phone: normalizedPhone,
+                secondary_phone: secondaryPhone ? normalizePhone(secondaryPhone) : null,
+                address: sanitize(address),
+                national_id: sanitize(nationalId)
+            });
             setMessage({ type: 'success', text: 'הפרטים עודכנו בהצלחה' });
+            await refreshProfile();
         } catch (err: any) {
             console.error(err);
             setMessage({ type: 'error', text: 'שגיאה בעדכון הפרטים' });
@@ -41,17 +79,81 @@ const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
     };
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             <div>
-                <label className="text-xs font-bold text-gray-500 block mb-1.5">טלפון נייד</label>
+                <label className="text-xs font-bold text-gray-500 block mb-1.5">שם מלא</label>
                 <input
-                    type="tel"
+                    type="text"
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="050-0000000"
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    placeholder="שם מלא"
                 />
             </div>
+
+            <div className="space-y-4">
+                <div>
+                    <label className="text-xs font-bold text-gray-500 block mb-1.5">טלפון נייד</label>
+                    <input
+                        type="tel"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                        value={phone}
+                        onChange={e => setPhone(e.target.value)}
+                        placeholder="050-0000000"
+                    />
+                </div>
+
+                <div>
+                    {!secondaryPhone && !showSecondary && (
+                        <button
+                            onClick={() => setShowSecondary(true)}
+                            className="text-blue-600 font-bold text-xs flex items-center gap-2 hover:bg-blue-50 p-2 rounded-lg transition-colors"
+                        >
+                            <Plus size={16} /> הוסף טלפון נוסף
+                        </button>
+                    )}
+
+                    {(secondaryPhone || showSecondary) && (
+                        <div className="animate-fade-in-up">
+                            <label className="text-xs font-bold text-gray-500 block mb-1.5 flex justify-between">
+                                <span>טלפון נוסף</span>
+                                <button onClick={() => { setSecondaryPhone(''); setShowSecondary(false); }} className="text-red-500 text-[10px]">הסר</button>
+                            </label>
+                            <input
+                                type="tel"
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                                value={secondaryPhone}
+                                onChange={e => setSecondaryPhone(e.target.value)}
+                                placeholder="נוסף"
+                            />
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1.5">כתובת מגורים</label>
+                <input
+                    type="text"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    placeholder="עיר, רחוב, מספר בית"
+                />
+            </div>
+
+            <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1.5">דואר אלקטרוני</label>
+                <input
+                    type="email"
+                    disabled
+                    className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-sm text-gray-500 cursor-not-allowed"
+                    // Use useAuth hook for authenticated email
+                    value={useAuth().user?.email || ''}
+                    placeholder="email@example.com"
+                />
+            </div>
+
             <div>
                 <label className="text-xs font-bold text-gray-500 block mb-1.5">ת.ז (National ID)</label>
                 <input
@@ -84,6 +186,7 @@ const SettingsView: React.FC = () => {
     const { user, t, language, switchLanguage } = useApp();
     const { profile, signOut, loading: authLoading } = useAuth();
     const [pushEnabled, setPushEnabled] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [checkingPush, setCheckingPush] = useState(true);
 
     if (authLoading || !user) {
@@ -145,28 +248,24 @@ const SettingsView: React.FC = () => {
         if (!file || !profile?.id) return;
 
         try {
-            const fileExt = file?.name?.split?.('.').pop() || 'unknown';
-            const filePath = `${profile.id}/avatar.${fileExt}`;
+            setLoading(true);
+            const compressed = await compressImage(file, 400, 400, 0.8);
+            const fileExt = file.name.split('.').pop() || 'jpg';
+            const filePath = `${profile.id}/avatar-${Date.now()}.${fileExt}`;
 
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file, { upsert: true });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
+            const publicUrl = await uploadAsset(compressed, 'avatars', filePath);
 
             await supabase
                 .from('profiles')
                 .update({ avatar_url: publicUrl })
                 .eq('id', profile.id);
 
-            window.location.reload(); // Refresh to show new avatar
+            window.location.reload();
         } catch (err) {
             console.error('Avatar upload failed', err);
             alert('העלאת תמונה נכשלה');
+        } finally {
+            setLoading(false);
         }
     };
 

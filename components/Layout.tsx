@@ -3,24 +3,43 @@ import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut,
-  LayoutDashboard,
+  Home,
   Settings,
   Users,
   Bell,
   CalendarDays,
   Car,
-  User,
-  Briefcase,
-  CheckCircle,
-  Database
+  Database,
+  Wrench,
+  RefreshCcw
 } from 'lucide-react';
 import SklackLogo from './SklackLogo';
 import NotificationBell from './NotificationBell';
+import { useData } from '../contexts/DataContext';
 import { UserRole } from '../types';
+import GarageView from './GarageView';
+import SettingsView from './SettingsView';
+import LoadingSpinner from './LoadingSpinner';
+import { WifiOff } from 'lucide-react';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isOnline, setIsOnline] = React.useState(navigator.onLine);
+
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const { activeView, navigateTo, isRTL, t } = useApp();
   const { profile, signOut } = useAuth();
+  const { loading: dataLoading } = useData();
 
   if (!profile) return <>{children}</>;
 
@@ -31,7 +50,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       case 'TASKS': return 'משימות';
       case 'VEHICLES': return 'רכבים';
       case 'APPOINTMENTS': return 'תורים';
-      case 'ORGANIZATION': return 'צוות';
+      case 'GARAGE': return 'המוסך שלי';
       case 'SETTINGS': return 'הגדרות';
       case 'NOTIFICATIONS': return 'התראות';
       default: return 'Sklack';
@@ -62,23 +81,23 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
     if (isAdmin) {
       return [
-        { view: 'DASHBOARD', icon: LayoutDashboard, label: 'בית' },
-        { view: 'VEHICLES', icon: Database, label: 'מוסך' },
-        { view: 'ORGANIZATION', icon: Users, label: 'צוות' },
-        { view: 'SETTINGS', icon: User, label: 'הגדרות' },
+        { view: 'DASHBOARD', icon: Home, label: 'בית' },
+        { view: 'GARAGE', icon: Wrench, label: 'מוסך' },
+        { view: 'APPOINTMENTS', icon: CalendarDays, label: 'תורים' },
+        { view: 'SETTINGS', icon: Settings, label: 'הגדרות' },
       ];
     }
 
     if (isWorker) {
       return [
-        { view: 'DASHBOARD', icon: LayoutDashboard, label: 'דף הבית' },
+        { view: 'DASHBOARD', icon: Home, label: 'דף הבית' },
         { view: 'SETTINGS', icon: Settings, label: 'הגדרות' },
       ];
     }
 
     if (isCustomer) {
       return [
-        { view: 'DASHBOARD', icon: LayoutDashboard, label: 'דף הבית' },
+        { view: 'DASHBOARD', icon: Home, label: 'דף הבית' },
         { view: 'SETTINGS', icon: Settings, label: 'הגדרות' },
       ];
     }
@@ -118,7 +137,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </div>
 
             <nav className="flex gap-3">
-              <NavItem view="DASHBOARD" icon={LayoutDashboard} label="דף הבית" />
+              <NavItem view="DASHBOARD" icon={Home} label="דף הבית" />
               {(profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER) && (
                 <>
                   <NavItem view="TASKS" icon={Car} label="משימות" />
@@ -131,6 +150,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
           <div className="flex items-center gap-8">
             <NotificationBell />
+            {dataLoading && <div className="animate-spin text-black"><RefreshCcw size={18} /></div>}
 
             <div className="flex items-center gap-6 pl-8 border-l border-gray-100">
               <div className="text-right">
@@ -148,8 +168,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
       </header>
 
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="fixed top-16 md:top-24 left-0 right-0 z-40 bg-red-600 text-white py-2.5 px-4 flex items-center justify-center gap-3 shadow-lg animate-fade-in">
+          <WifiOff size={18} className="animate-pulse" />
+          <span className="text-xs font-black tracking-wide">מצב לא מקוון - ייתכן וחלק מהנתונים אינם מעודכנים</span>
+        </div>
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-12 pb-28 md:pb-12">
+      <main className={`flex-1 w-full max-w-7xl mx-auto p-4 md:p-12 pb-28 md:pb-12 transition-all ${!isOnline ? 'mt-8' : ''}`}>
         <div className="animate-fade-in-up">
           {children}
         </div>

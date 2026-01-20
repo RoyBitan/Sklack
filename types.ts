@@ -23,10 +23,14 @@ export enum Language {
 
 export enum TaskStatus {
   WAITING = 'WAITING',
+  APPROVED = 'APPROVED',
   IN_PROGRESS = 'IN_PROGRESS',
-  PAUSED = 'PAUSED',
   COMPLETED = 'COMPLETED',
-  CUSTOMER_APPROVAL = 'CUSTOMER_APPROVAL'
+  CUSTOMER_APPROVAL = 'CUSTOMER_APPROVAL',
+  CANCELLED = 'CANCELLED',
+  PAUSED = 'PAUSED',
+  WAITING_FOR_APPROVAL = 'WAITING_FOR_APPROVAL',
+  SCHEDULED = 'SCHEDULED'
 }
 
 export enum Priority {
@@ -64,6 +68,8 @@ export interface Profile {
   org_id: string | null;
   full_name: string;
   phone: string | null;
+  secondary_phone?: string | null;
+  address?: string | null;
   national_id?: string | null;
   role: UserRole;
   membership_status: MembershipStatus;
@@ -74,17 +80,27 @@ export interface Profile {
   };
   avatar_url?: string;
   created_at: string;
+  organization?: {
+    name: string;
+  };
 }
 
 export interface Vehicle {
   id: string;
   org_id: string;
-  customer_id: string | null;
+  owner_id: string | null;
+  owner_name?: string | null;
   plate: string;
   model: string;
   year: string | null;
   color: string | null;
+  vin?: string | null;
+  fuel_type?: string | null;
+  engine_model?: string | null;
+  registration_valid_until?: string | null;
+  kodanit?: string | null;
   created_at: string;
+  owner?: Profile;
 }
 
 export interface Task {
@@ -105,6 +121,8 @@ export interface Task {
   immobilizer_code: string | null;
   created_at: string;
   metadata: Record<string, any>;
+  scheduled_reminder_at?: string | null;
+  reminder_sent?: boolean;
 
   // Virtual joins for UI convenience
   vehicle?: Vehicle;
@@ -148,7 +166,7 @@ export interface AuditLog {
   created_at: string;
 }
 
-export type AppView = 'DASHBOARD' | 'TASKS' | 'VEHICLES' | 'ORGANIZATION' | 'NOTIFICATIONS' | 'APPOINTMENTS' | 'SETTINGS';
+export type AppView = 'DASHBOARD' | 'TASKS' | 'VEHICLES' | 'ORGANIZATION' | 'NOTIFICATIONS' | 'APPOINTMENTS' | 'SETTINGS' | 'TASK_DETAIL' | 'REQUEST_DETAIL';
 
 export interface Notification {
   id: string;
@@ -159,10 +177,33 @@ export interface Notification {
   task_id?: string;
   url?: string;
   type: string;
+  actor_id?: string;
+  metadata?: Record<string, any>;
   created_at: string;
 }
 
 export interface PreCheckInData {
   vehiclePlate: string;
+  vehicleModel?: string;
+  vehicleYear?: string;
+  vehicleColor?: string;
+
+  // Owner Details
+  ownerName?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  ownerAddress?: string;
+
+  // Check-In Details
+  currentMileage?: string;
+  serviceTypes?: string[]; // e.g. ['Annual Service', 'Test']
   faultDescription: string;
+  paymentMethod?: 'CREDIT_CARD' | 'CASH' | 'OTHER';
+
+  // Appointment Request
+  appointmentDate?: string;
+  appointmentTime?: string;
+
+  submittedAt?: number;
+  hasInsurance?: boolean;
 }

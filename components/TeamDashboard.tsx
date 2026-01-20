@@ -5,11 +5,13 @@ import { useData } from '../contexts/DataContext';
 import { TaskStatus } from '../types';
 import TaskCard from './TaskCard';
 import LoadingSpinner from './LoadingSpinner';
-import { Briefcase, ListTodo, Sun, Layers, CheckCircle } from 'lucide-react';
+import { Briefcase, ListTodo, Sun, Layers, CheckCircle, Shield } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const TeamDashboard: React.FC = () => {
     const { user, t } = useApp();
-    const { tasks, loading } = useData();
+    const { profile } = useAuth();
+    const { tasks, loading, hasMoreTasks, loadMoreTasks } = useData();
     const [view, setView] = useState<'MY_TASKS' | 'OPEN' | 'HISTORY'>('MY_TASKS');
 
     // Filter tasks assigned to me that are IN_PROGRESS
@@ -22,9 +24,9 @@ const TeamDashboard: React.FC = () => {
         tasks.filter(t => t.assigned_to?.includes(user?.id || '') && t.status === TaskStatus.WAITING),
         [tasks, user?.id]);
 
-    // Filter open tasks (unassigned or assigned to others but waiting)
+    // Filter open tasks (unassigned or assigned to others but waiting/approved)
     const openTasks = React.useMemo(() =>
-        tasks.filter(t => t.status === TaskStatus.WAITING),
+        tasks.filter(t => (t.status === TaskStatus.WAITING || t.status === TaskStatus.APPROVED) && (!t.assigned_to || t.assigned_to.length === 0)),
         [tasks]);
 
     // Filter completed tasks assigned to me
@@ -42,20 +44,29 @@ const TeamDashboard: React.FC = () => {
         <div className="pb-20 space-y-4 md:space-y-6">
 
             {/* Welcome Header */}
-            <div className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-xl shadow-blue-200">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-xl -ml-10 -mb-10 pointer-events-none"></div>
-
-                <div className="relative p-5 md:p-8">
-                    <div className="flex items-center gap-2 text-blue-200 text-sm font-medium mb-1">
-                        <Sun size={16} />
-                        <span>יום עבודה נעים!</span>
+            <div className="relative overflow-hidden bg-gray-900 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl">
+                <div className="absolute -top-10 -right-10 w-48 h-48 bg-blue-600/30 rounded-full blur-3xl"></div>
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 text-start">
+                    <div>
+                        <div className="flex items-center gap-2 text-blue-300 text-xs font-black uppercase tracking-widest mb-3">
+                            <Sun size={14} />
+                            יום עבודה נעים!
+                        </div>
+                        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">שלום, {profile?.full_name?.split?.(' ')?.[0] || 'צוות'}</h1>
+                        <p className="text-gray-400 font-bold max-w-sm leading-relaxed text-base md:text-lg">
+                            יש לך <span className="text-white underline decoration-emerald-500 decoration-2">{activeTasks.length}</span> משימות פעילות
+                            {myQueue.length > 0 && ` ועוד ${myQueue.length} בתור.`}
+                        </p>
                     </div>
-                    <h1 className="text-2xl md:text-3xl font-bold mb-2">שלום, {user?.full_name?.split?.(' ')?.[0] || 'צוות'}</h1>
-                    <p className="text-blue-100 opacity-90 text-sm md:text-base max-w-sm">
-                        יש לך <span className="font-bold bg-white/20 px-2 py-0.5 rounded text-white">{activeTasks.length}</span> משימות פעילות היום
-                        {myQueue.length > 0 && ` + ${myQueue.length} בתור`}
-                    </p>
+                    {profile?.organization?.name && (
+                        <div className="bg-white/10 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/10 flex items-center gap-4 shadow-xl">
+                            <Shield className="text-emerald-400" size={28} />
+                            <div className="text-start">
+                                <div className="text-[10px] font-black uppercase text-emerald-300 tracking-widest mb-0.5">סניף פעיל</div>
+                                <div className="font-black text-lg">{profile.organization.name}</div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -180,6 +191,18 @@ const TeamDashboard: React.FC = () => {
                     </>
                 )}
             </div>
+
+            {hasMoreTasks && (
+                <div className="flex justify-center pt-6">
+                    <button
+                        onClick={loadMoreTasks}
+                        disabled={loading}
+                        className="w-full py-4 bg-white border-2 border-black rounded-[1.5rem] font-black text-sm hover:bg-black hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest shadow-xl"
+                    >
+                        {loading ? 'טוען...' : 'צפה במשימות קודמות'}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
