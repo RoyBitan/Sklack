@@ -76,7 +76,7 @@ const AppointmentsView: React.FC = () => {
 
   const WORKING_HOURS = useMemo(() => {
     const slots = [];
-    for (let h = 8; h <= 18; h++) {
+    for (let h = 7; h <= 19; h++) {
       slots.push(`${h.toString().padStart(2, "0")}:00`);
     }
     return slots;
@@ -264,73 +264,39 @@ const AppointmentsView: React.FC = () => {
       {isManager
         ? (
           <div className="space-y-8">
-            {/* Header with Navigation */}
-            <div className="flex flex-col lg:flex-row items-center justify-between gap-6 border-b-2 border-black pb-6">
-              <div className="text-start">
-                <h2 className="text-3xl font-black tracking-tighter">
-                  יומן תורים
+            {/* Simple Weekly Navigation */}
+            <div className="flex items-center justify-between gap-4 bg-white/50 p-2 rounded-2xl border border-gray-100 mb-4">
+              <button
+                onClick={() => navigateWeek(-1)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                title="שבוע קודם"
+              >
+                <ChevronRight size={24} />
+              </button>
+
+              <div className="flex flex-col items-center">
+                <h2 className="text-lg font-black tracking-tight text-gray-900">
+                  {weekDays[0].toLocaleDateString("en-US", {
+                    day: "numeric",
+                    month: "short",
+                  })} - {weekDays[6].toLocaleDateString("en-US", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
                 </h2>
-                <p className="text-gray-400 font-bold mt-1 uppercase tracking-widest text-[10px]">
-                  סקלאק ניהול - תצוגה שבועית
-                </p>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest -mt-1">
+                  Weekly Schedule Overview
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-[2rem] shadow-2xl border border-gray-100">
-                <div className="flex gap-1 border-r border-gray-100 pr-3 mr-1">
-                  <button
-                    onClick={() => navigateMonth(-1)}
-                    className="p-3 hover:bg-gray-50 rounded-xl transition-all"
-                    title="חודש קודם"
-                  >
-                    <ChevronRight size={18} />
-                    <ChevronRight size={18} className="-mr-2.5" />
-                  </button>
-                  <button
-                    onClick={() => navigateWeek(-1)}
-                    className="p-3 hover:bg-gray-50 rounded-xl transition-all"
-                    title="שבוע קודם"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
-
-                <div className="px-4 py-1.5 text-center min-w-[160px]">
-                  <div className="text-sm font-black text-gray-900">
-                    {viewDate.toLocaleString("he-IL", {
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </div>
-                  <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">
-                    תצוגת ניהול
-                  </div>
-                </div>
-
-                <div className="flex gap-1 border-l border-gray-100 pl-3 ml-1">
-                  <button
-                    onClick={() => navigateWeek(1)}
-                    className="p-3 hover:bg-gray-50 rounded-xl transition-all"
-                    title="שבוע הבא"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <button
-                    onClick={() => navigateMonth(1)}
-                    className="p-3 hover:bg-gray-50 rounded-xl transition-all"
-                    title="חודש הבא"
-                  >
-                    <ChevronLeft size={18} />
-                    <ChevronLeft size={18} className="-ml-2.5" />
-                  </button>
-                </div>
-
-                <button
-                  onClick={goToToday}
-                  className="px-6 py-3 bg-black text-white rounded-xl font-black text-xs hover:bg-gray-800 transition-all shadow-lg ml-2"
-                >
-                  היום
-                </button>
-              </div>
+              <button
+                onClick={() => navigateWeek(1)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                title="שבוע הבא"
+              >
+                <ChevronLeft size={24} />
+              </button>
             </div>
 
             {/* Pending Requests */}
@@ -429,23 +395,27 @@ const AppointmentsView: React.FC = () => {
             )}
 
             {/* Calendar Grid Container */}
-            <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/20 shadow-xl overflow-x-auto relative group/calendar">
-              <div className="min-w-[1000px]">
-                <div className="grid grid-cols-[80px_repeat(7,1fr)] bg-gray-900 text-white border-b border-gray-800">
-                  <div className="p-4 border-r border-gray-800 font-black text-[9px] uppercase tracking-widest opacity-40 flex items-end justify-center">
-                    זמן
+            <div className="bg-white rounded-[1.5rem] border border-gray-200 shadow-sm overflow-x-auto relative group/calendar">
+              <div className="w-full">
+                <div className="grid grid-cols-[50px_repeat(7,1fr)] bg-gray-50 text-gray-400 border-b border-gray-200">
+                  <div className="p-2 border-r border-gray-200 font-black text-[8px] uppercase tracking-widest flex items-end justify-center">
+                    שעה
                   </div>
                   {weekDays.map((day) => (
                     <div
                       key={day.toString()}
-                      className={`p-3 text-center border-r border-gray-800 last:border-0 ${
-                        isToday(day) ? "bg-blue-600" : ""
+                      className={`p-2 text-center border-r border-gray-200 last:border-0 ${
+                        isToday(day) ? "bg-blue-600 text-white" : ""
                       }`}
                     >
-                      <div className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-0.5">
+                      <div
+                        className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${
+                          isToday(day) ? "opacity-90" : "opacity-40"
+                        }`}
+                      >
                         {day.toLocaleString("he-IL", { weekday: "short" })}
                       </div>
-                      <div className="text-xl font-black tracking-tighter">
+                      <div className="text-base font-black tracking-tighter">
                         {day.getDate()}
                       </div>
                     </div>
@@ -456,9 +426,9 @@ const AppointmentsView: React.FC = () => {
                   {WORKING_HOURS.map((time) => (
                     <div
                       key={time}
-                      className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-gray-100/50 group/row"
+                      className="grid grid-cols-[50px_repeat(7,1fr)] border-b border-gray-100/30 group/row"
                     >
-                      <div className="p-4 border-r border-gray-100/50 bg-gray-50/30 flex items-center justify-center font-black text-gray-400 text-[11px] group-hover/row:text-black transition-colors">
+                      <div className="p-1 border-r border-gray-100/50 bg-gray-50/10 flex items-center justify-center font-bold text-gray-400 text-[8.5px] group-hover/row:text-black transition-colors">
                         {time}
                       </div>
                       {weekDays.map((day) => {
@@ -477,8 +447,8 @@ const AppointmentsView: React.FC = () => {
                         return (
                           <div
                             key={`${day}-${time}`}
-                            className={`min-h-[100px] p-1.5 border-r border-gray-100/30 relative transition-all duration-300 ${
-                              isToday(day) ? "bg-blue-50/10" : ""
+                            className={`min-h-[60px] p-0.5 border-r border-gray-100/10 relative transition-all duration-300 ${
+                              isToday(day) ? "bg-blue-50/5" : ""
                             } group/slot`}
                           >
                             {bookedItem
@@ -488,67 +458,68 @@ const AppointmentsView: React.FC = () => {
                                     app
                                       ? handleEdit(app)
                                       : navigate(`/tasks/${taskApp?.id}`)}
-                                  className={`h-full w-full rounded-xl p-2.5 text-start transition-all cursor-pointer shadow-md hover:shadow-lg hover:scale-[1.03] border-r-4 ${
+                                  className={`h-full w-full rounded-md p-1.5 text-start transition-all cursor-pointer shadow-sm hover:scale-[1.01] border-r-2 ${
                                     app
                                       ? "bg-white border-black"
                                       : "bg-purple-600 text-white border-purple-800"
                                   }`}
                                 >
                                   <div
-                                    className={`text-[9px] font-black uppercase tracking-widest truncate ${
+                                    className={`text-[7px] font-black uppercase tracking-tight truncate mb-0.5 ${
                                       app ? "text-gray-400" : "text-purple-200"
                                     }`}
                                   >
                                     {app
-                                      ? (app.service_type || "תור מוזמן")
-                                      : "משימה מאושרת"}
+                                      ? (app.service_type || "APPT")
+                                      : "TASK"}
                                   </div>
-                                  <div className="text-xs font-black mt-1 leading-tight line-clamp-2">
+                                  <div className="text-[9px] font-black leading-none line-clamp-1 mb-1">
                                     {app ? app.description : taskApp?.title}
                                   </div>
                                   <div
-                                    className={`text-[10px] font-bold mt-2 pt-2 border-t flex flex-col gap-0.5 ${
+                                    className={`text-[8px] font-bold mt-0.5 pt-0.5 border-t flex flex-col gap-0 ${
                                       app
                                         ? "text-gray-500 border-gray-50"
-                                        : "text-purple-100 border-purple-500/30"
+                                        : "text-purple-100 border-purple-500/20"
                                     }`}
                                   >
-                                    <span className="truncate">
-                                      👤 {app
+                                    <span className="truncate opacity-90 leading-tight">
+                                      {app
                                         ? (app.customer?.full_name ||
-                                          app.customer_name || "לקוח")
+                                          app.customer_name || "Guest")
                                         : (taskApp?.vehicle?.owner?.full_name ||
-                                          "לקוח")}
+                                          "Guest")}
                                     </span>
-                                    <span className="font-mono text-[8.5px]">
-                                      🚗 {app
+                                    <span className="font-mono text-[7px] opacity-50 shrink-0">
+                                      {app
                                         ? (app.vehicle?.plate ||
                                           app.vehicle_plate || "---")
                                         : (taskApp?.vehicle?.plate || "---")}
                                     </span>
-                                    {app && (
-                                      <div className="flex gap-2 mt-1">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleEdit(app);
-                                          }}
-                                          className="p-1 hover:bg-gray-100 rounded text-gray-400"
-                                        >
-                                          <Edit2 size={12} />
-                                        </button>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDelete(app.id);
-                                          }}
-                                          className="p-1 hover:bg-red-50 rounded text-red-400"
-                                        >
-                                          <Trash2 size={12} />
-                                        </button>
-                                      </div>
-                                    )}
                                   </div>
+
+                                  {app && (
+                                    <div className="absolute top-1 left-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 rounded-md p-0.5 shadow-sm">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEdit(app);
+                                        }}
+                                        className="p-0.5 hover:bg-gray-100 rounded text-gray-400"
+                                      >
+                                        <Edit2 size={8} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDelete(app.id);
+                                        }}
+                                        className="p-0.5 hover:bg-red-50 rounded text-red-400"
+                                      >
+                                        <Trash2 size={8} />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               )
                               : (
