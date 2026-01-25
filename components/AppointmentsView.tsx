@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AppointmentStatus, UserRole, Task, TaskStatus } from '../types';
 import { CalendarDays, Clock, Check, X, AlertCircle, ChevronLeft, ChevronRight, CheckCircle2, Plus, Edit2, Trash2, Database, MessageSquare, Info, User, Phone } from 'lucide-react';
@@ -8,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { formatLicensePlate, cleanLicensePlate } from '../utils/formatters';
 import { fetchVehicleDataFromGov, isValidIsraeliPlate } from '../utils/vehicleApi';
 import { Loader } from 'lucide-react';
+import { toast } from 'sonner';
 
 const AppointmentsView: React.FC = () => {
     const { t } = useApp();
@@ -22,8 +24,9 @@ const AppointmentsView: React.FC = () => {
     const [showReminderOptions, setShowReminderOptions] = useState<Task | null>(null);
     const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
 
-    const { tasks, updateTaskStatus, approveTask, updateTask, sendSystemNotification } = useData();
-    const { setSelectedRequestId, navigateTo } = useApp();
+    const { tasks, approveTask, updateTask, updateTaskStatus, sendSystemNotification } = useData();
+    const { setSelectedRequestId } = useApp();
+    const navigate = useNavigate();
 
     const serviceLabels: Record<string, string> = {
         'ROUTINE_SERVICE': 'טיפול תקופתי',
@@ -38,7 +41,7 @@ const AppointmentsView: React.FC = () => {
 
     const pendingRequests = useMemo(() => tasks.filter(t => t.status === TaskStatus.WAITING_FOR_APPROVAL), [tasks]);
 
-    const isManager = profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.DEPUTY_MANAGER;
+    const isManager = profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.STAFF;
 
     const WORKING_HOURS = useMemo(() => {
         const slots = [];
@@ -137,7 +140,7 @@ const AppointmentsView: React.FC = () => {
             await refreshData();
         } catch (err) {
             console.error('Failed to delete appointment:', err);
-            alert('שגיאה במחיקת התור');
+            toast.error('שגיאה במחיקת התור');
         }
     };
 
@@ -148,6 +151,7 @@ const AppointmentsView: React.FC = () => {
         setBookingData({
             customerName: appointment.customer?.full_name || '',
             vehiclePlate: appointment.vehicle?.plate || '',
+            phone: appointment.customer?.phone || '',
             serviceType: appointment.service_type || '', // Using serviceType as description
             duration: appointment.duration || '1 שעה', // Assuming duration exists or default
             make: appointment.vehicle?.model || ''
@@ -164,6 +168,7 @@ const AppointmentsView: React.FC = () => {
         setEditingId(null); // New booking
         setBookingData({
             customerName: '',
+            phone: '',
             vehiclePlate: '',
             serviceType: '',
             duration: '1 שעה',
@@ -204,7 +209,7 @@ const AppointmentsView: React.FC = () => {
             setEditingId(null);
         } catch (err) {
             console.error('Booking failed:', err);
-            alert('שגיאה בשמירת התור');
+            toast.error('שגיאה בשמירת התור');
         } finally {
             setLoading(false);
         }
@@ -261,10 +266,7 @@ const AppointmentsView: React.FC = () => {
 
                                         <div className="flex gap-2 pt-2 border-t border-gray-100">
                                             <button
-                                                onClick={() => {
-                                                    setSelectedRequestId(task.id);
-                                                    navigateTo('REQUEST_DETAIL');
-                                                }}
+                                                onClick={() => navigate(`/appointments/${task.id}`)}
                                                 className="flex-1 bg-gray-900 text-white py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 hover:bg-gray-800 transition-all shadow-lg active:scale-95"
                                             >
                                                 <Info size={14} /> עוד פרטים
@@ -299,7 +301,7 @@ const AppointmentsView: React.FC = () => {
                                                                 }
                                                             } else {
                                                                 await approveTask(task.id, false);
-                                                                alert(`התור נקבע ל-${taskDate} בשעה ${(task.metadata as any)?.appointmentTime || ''}`);
+                                                                toast.success(`התור נקבע ל-${taskDate} בשעה ${(task.metadata as any)?.appointmentTime || ''}`);
                                                             }
                                                         }}
                                                         className="bg-green-600 text-white p-2.5 rounded-xl hover:bg-green-700 transition-all shadow-lg active:scale-95"
@@ -309,9 +311,8 @@ const AppointmentsView: React.FC = () => {
                                                     </button>
                                                     <button
                                                         onClick={async () => {
-                                                            if (confirm('לבטל את הבקשה?')) {
-                                                                await updateTaskStatus(task.id, TaskStatus.CANCELLED);
-                                                            }
+                                                            await updateTaskStatus(task.id, TaskStatus.CANCELLED);
+                                                            toast.success('הבקשה בוטלה');
                                                         }}
                                                         className="bg-red-500 text-white p-2.5 rounded-xl hover:bg-red-600 transition-all shadow-lg active:scale-95"
                                                         title="דחה"
@@ -328,56 +329,66 @@ const AppointmentsView: React.FC = () => {
                     </section>
                 )}
 
-                <div className="space-y-6">
-                    {WORKING_HOURS.map(time => {
-                        const app = appointments.find(a => a.appointment_date === selectedDate && a.appointment_time.startsWith(time));
-                        return (
-                            <button
-                                key={time}
-                                onClick={() => !app && handleSlotClick(time)}
-                                disabled={!!app}
-                                className={`w-full text-start card-premium p-4 md:p-6 flex items-center justify-between gap-4 group transition-all duration-300 ${app ? 'bg-white cursor-default' : 'bg-gray-50/50 hover:bg-white hover:scale-[1.01] hover:shadow-lg cursor-pointer'}`}
-                            >
-                                <div className="flex items-center gap-6">
-                                    <div className={`text-xl font-black w-16 tracking-tighter ${app ? 'text-black' : 'text-gray-900/40 group-hover:text-black'}`}>{time}</div>
-                                    {app ? (
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-1.5 h-12 bg-black rounded-full shadow-[0_0_15px_rgba(0,0,0,0.1)]"></div>
-                                            <div>
-                                                <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">{app.service_type || 'טיפול כללי'}</div>
-                                                <div className="text-lg font-black tracking-tight">{app.description}</div>
-                                                {/* @ts-ignore */}
-                                                <div className="text-[10px] font-bold text-gray-500 mt-0.5">{app.customer?.full_name || 'לקוח'} • {app.vehicle?.plate || ''}</div>
+                {new Date(selectedDate).getDay() === 6 ? (
+                    <div className="text-center py-20 bg-gray-50 rounded-[2.5rem] border border-dashed border-gray-200">
+                        <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-200 shadow-inner">
+                            <CalendarDays size={40} />
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 mb-2">המוסך סגור בשבת</h3>
+                        <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">אנא בחר תאריך אחר לקביעת תור</p>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        {WORKING_HOURS.map(time => {
+                            const app = appointments.find(a => a.appointment_date === selectedDate && a.appointment_time.startsWith(time));
+                            return (
+                                <button
+                                    key={time}
+                                    onClick={() => !app && handleSlotClick(time)}
+                                    disabled={!!app}
+                                    className={`w-full text-start card-premium p-4 md:p-6 flex items-center justify-between gap-4 group transition-all duration-300 ${app ? 'bg-white cursor-default' : 'bg-gray-50/50 hover:bg-white hover:scale-[1.01] hover:shadow-lg cursor-pointer'}`}
+                                >
+                                    <div className="flex items-center gap-6">
+                                        <div className={`text-xl font-black w-16 tracking-tighter ${app ? 'text-black' : 'text-gray-900/40 group-hover:text-black'}`}>{time}</div>
+                                        {app ? (
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-1.5 h-12 bg-black rounded-full shadow-[0_0_15px_rgba(0,0,0,0.1)]"></div>
+                                                <div>
+                                                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-0.5">{app.service_type || 'טיפול כללי'}</div>
+                                                    <div className="text-lg font-black tracking-tight">{app.description}</div>
+                                                    {/* @ts-ignore */}
+                                                    <div className="text-[10px] font-bold text-gray-500 mt-0.5">{app.customer?.full_name || 'לקוח'} • {app.vehicle?.plate || ''}</div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-3 text-gray-300 font-black uppercase tracking-[0.2em] text-[10px] group-hover:text-black/50 transition-colors">
+                                                <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                <span>לחץ לשיריון תור</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {app && (
+                                        <div className="flex items-center gap-2">
+                                            <div
+                                                onClick={(e) => { e.stopPropagation(); handleEdit(app); }}
+                                                className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-black transition-colors cursor-pointer"
+                                            >
+                                                <Edit2 size={16} />
+                                            </div>
+                                            <div
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(app.id); }}
+                                                className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                                            >
+                                                <Trash2 size={16} />
                                             </div>
                                         </div>
-                                    ) : (
-                                        <div className="flex items-center gap-3 text-gray-300 font-black uppercase tracking-[0.2em] text-[10px] group-hover:text-black/50 transition-colors">
-                                            <Plus size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            <span>לחץ לשיריון תור</span>
-                                        </div>
                                     )}
-                                </div>
-
-                                {app && (
-                                    <div className="flex items-center gap-2">
-                                        <div
-                                            onClick={(e) => { e.stopPropagation(); handleEdit(app); }}
-                                            className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-black transition-colors cursor-pointer"
-                                        >
-                                            <Edit2 size={16} />
-                                        </div>
-                                        <div
-                                            onClick={(e) => { e.stopPropagation(); handleDelete(app.id); }}
-                                            className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
-                                        >
-                                            <Trash2 size={16} />
-                                        </div>
-                                    </div>
-                                )}
-                            </button>
-                        );
-                    })}
-                </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Booking Modal */}
                 {showModal && (
@@ -570,7 +581,7 @@ const AppointmentsView: React.FC = () => {
                                                     );
                                                 }
                                                 setReschedulingTask(null);
-                                                alert('המועד עודכן והודעה נשלחה ללקוח.');
+                                                toast.success('המועד עודכן והודעה נשלחה ללקוח.');
                                             }}
                                             className="flex-1 btn-primary py-4 rounded-xl font-black shadow-lg"
                                         >

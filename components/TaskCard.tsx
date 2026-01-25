@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Task, TaskStatus, Priority, UserRole, Profile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
@@ -40,14 +41,15 @@ interface TaskCardProps {
 const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     const { profile } = useAuth();
     const { refreshData, updateTaskStatus, claimTask, releaseTask, deleteTask: deleteTaskFn, approveTask } = useData();
-    const { navigateTo, setSelectedTaskId } = useApp();
+    const { setSelectedTaskId } = useApp();
+    const navigate = useNavigate();
     const [expanded, setExpanded] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [assignedWorkers, setAssignedWorkers] = useState<Profile[]>([]);
 
-    const isManager = profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.DEPUTY_MANAGER;
-    const isTeam = profile?.role === UserRole.TEAM;
+    const isManager = profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.STAFF;
+    const isStaff = profile?.role === UserRole.STAFF;
 
     // Fetch assigned worker profiles
     useEffect(() => {
@@ -156,7 +158,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                                 )}
 
                                 {/* WORKER BADGE - Real-time indicator for Admins/Team */}
-                                {(isManager || isTeam) && assignedWorkers.length > 0 && (
+                                {(isManager) && assignedWorkers.length > 0 && (
                                     <div className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-1.5 rounded-full shadow-lg border-2 border-white animate-pulse-subtle">
                                         <Wrench size={14} className="animate-spin-slow" />
                                         <span className="text-xs font-black tracking-tight whitespace-nowrap">
@@ -167,13 +169,12 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                             </div>
 
                             {/* 'More Details' Button - Static Action for Admins/Staff */}
-                            {(isManager || isTeam) && (
+                            {(isManager) && (
                                 <div className="mt-4 border-t border-gray-50 pt-4 flex gap-3">
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setSelectedTaskId(task.id);
-                                            navigateTo('TASK_DETAIL');
+                                            navigate(`/tasks/${task.id}`);
                                         }}
                                         className="flex-1 bg-purple-50 text-purple-700 py-4 rounded-2xl text-sm font-black flex items-center justify-center gap-3 hover:bg-purple-600 hover:text-white transition-all border border-purple-100 shadow-md active:scale-95 group/btn"
                                     >
@@ -185,7 +186,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                             )}
 
                             {/* Assigned Workers - Manager & Team Only */}
-                            {(isManager || isTeam) && assignedWorkers.length > 0 && (
+                            {(isManager) && assignedWorkers.length > 0 && (
                                 <div className="flex flex-col gap-2 mt-4">
                                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">בטיפול ע"י:</div>
                                     <div className="flex items-center gap-3 text-sm bg-blue-50 w-fit px-4 py-2 rounded-2xl border border-blue-100 shadow-sm">
@@ -257,7 +258,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                             )}
 
                             {/* Worker Workflow Buttons */}
-                            {isTeam && (
+                            {isManager && (
                                 <div className="flex flex-wrap gap-3 mt-4">
                                     {!task.assigned_to?.includes(profile?.id || '') ? (
                                         <button
@@ -342,7 +343,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                             {(() => {
                                 const kodanitValue = task.immobilizer_code || task.vehicle?.kodanit;
                                 const isOwner = profile?.id === task.vehicle?.owner_id;
-                                const isAssignedStaff = isTeam && task.assigned_to?.includes(profile?.id || '') && task.status !== TaskStatus.COMPLETED;
+                                const isAssignedStaff = isManager && task.assigned_to?.includes(profile?.id || '') && task.status !== TaskStatus.COMPLETED;
                                 const canSeeKodanit = isManager || isOwner || isAssignedStaff;
 
                                 if (kodanitValue && canSeeKodanit) {
@@ -451,7 +452,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                     </div>
                 </div>
             )}
-            {showEditModal && <EditTaskModal task={task} onClose={() => setShowEditModal(false)} />}
             {showEditModal && <EditTaskModal task={task} onClose={() => setShowEditModal(false)} />}
         </div>
     );

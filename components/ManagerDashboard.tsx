@@ -89,7 +89,7 @@ const ManagerDashboard: React.FC = () => {
                     <div>
                         <div className="flex items-center gap-2 text-blue-300 text-xs font-black uppercase tracking-widest mb-3">
                             <Sun size={14} />
-                            יום עבודה פורה!
+                            שיהיה לך יום סקלאק!
                         </div>
                         <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">שלום, {profile?.full_name?.split?.(' ')?.[0] || 'מנהל'}</h1>
                         <p className="text-gray-400 font-bold max-w-sm leading-relaxed text-base md:text-lg">ביצועי המוסך שלך במבט חטוף. הכל תחת שליטה.</p>
@@ -98,7 +98,7 @@ const ManagerDashboard: React.FC = () => {
                         <div className="bg-white/10 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/10 flex items-center gap-4 shadow-xl">
                             <Shield className="text-emerald-400" size={28} />
                             <div className="text-start">
-                                <div className="text-[10px] font-black uppercase text-emerald-300 tracking-widest mb-0.5">מחובר לסניף</div>
+                                <div className="text-[10px] font-black uppercase text-emerald-300 tracking-widest mb-0.5">מחובר ומאובטח</div>
                                 <div className="font-black text-lg">{profile.organization.name}</div>
                             </div>
                         </div>

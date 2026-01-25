@@ -44,7 +44,6 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
     const [engineModel, setEngineModel] = useState('');
     const [registrationValidUntil, setRegistrationValidUntil] = useState('');
 
-    // Debounced Lookup Logic
     React.useEffect(() => {
         const normalized = normalizePhone(phone);
         if (normalized.length < 9) {
@@ -71,6 +70,11 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                     setModel(vehicles[0].model);
                     setYear(vehicles[0].year || '');
                     setColor(vehicles[0].color || '');
+                    // Auto-fill additional fields
+                    setVin(vehicles[0].vin || '');
+                    setFuelType(vehicles[0].fuel_type || '');
+                    setEngineModel(vehicles[0].engine_model || '');
+                    setImmobilizer(vehicles[0].kodanit || '');
                 } else if (vehicles.length > 1) {
                     setLookupStatus('partial');
                     setFoundVehicles(vehicles);
@@ -110,7 +114,11 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                 setModel(existing.model);
                 setYear(existing.year || '');
                 setColor(existing.color || '');
-                setImmobilizer(existing.immobilizer_code || '');
+                // Auto-fill additional fields from existing vehicle
+                setImmobilizer(existing.kodanit || '');
+                setVin(existing.vin || '');
+                setFuelType(existing.fuel_type || '');
+                setEngineModel(existing.engine_model || '');
             }
         } catch (e) {
             console.error('Vehicle lookup failed', e);
@@ -176,6 +184,12 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
         setModel(v.model);
         setYear(v.year || '');
         setColor(v.color || '');
+        // Auto-fill additional fields on selection
+        setVin(v.vin || '');
+        setFuelType(v.fuel_type || '');
+        setEngineModel(v.engine_model || '');
+        setImmobilizer(v.kodanit || '');
+        
         setFoundVehicles([]);
         setShowVehicleSelect(false);
     };
@@ -308,7 +322,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                                 value={title}
                                 onChange={e => setTitle(e.target.value)}
                                 className="input-premium px-4 py-3 text-base rounded-xl"
-                                placeholder="לדוגמה: טיפול 10,000 + החלפת ברקסים"
+                                placeholder="מה צריך לעשות ברכב?"
                             />
                         </div>
 
@@ -402,7 +416,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
 
                         <div className="flex items-center gap-3 mb-6">
                             <Car size={24} className="text-gray-400" />
-                            <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em]">פרטי רכב (אופציונלי)</span>
+                            <span className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em]">פרטי רכב</span>
                         </div>
 
                         <div className="space-y-6">
@@ -443,7 +457,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
 
                             <div className="bg-white p-4 rounded-2xl border border-gray-200 flex items-center justify-between">
                                 <div className="text-start">
-                                    <div className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Make, Model & Year</div>
+                                    <div className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">יצרן, דגם ושנה</div>
                                     <div className="text-sm font-black text-black">
                                         {model || '---'} {year ? `(${year})` : ''}
                                     </div>
@@ -455,30 +469,30 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                                 onClick={() => setShowVehicleSelect(!showVehicleSelect)}
                                 className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-xl hover:bg-gray-100 transition-colors"
                             >
-                                <span className="font-black text-[10px] text-gray-500 uppercase tracking-widest">פרטי רכב נוספים (קודנית, שלדה, דלק)</span>
+                                <span className="font-black text-[10px] text-gray-500 uppercase tracking-widest">פרטי רכב נוספים</span>
                                 <ChevronDown className={`transition-transform ${showVehicleSelect ? 'rotate-180' : ''}`} size={16} />
                             </button>
 
                             {showVehicleSelect && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 animate-fade-in-up">
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">קודנית (Kodanit)</label>
+                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">קודנית</label>
                                         <input
                                             type="text"
                                             value={immobilizer}
                                             onChange={e => setImmobilizer(e.target.value)}
-                                            className="input-premium px-4 py-3 text-base rounded-xl bg-white font-mono tracking-widest text-center"
+                                            className="input-premium px-4 py-3 text-base rounded-xl bg-white font-mono tracking-widest text-start"
                                             placeholder="1234"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">שנתון רכב</label>
+                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">שנתון</label>
                                         <input
                                             type="text"
                                             value={year}
                                             onChange={e => setYear(e.target.value)}
                                             className="input-premium px-4 py-3 text-base rounded-xl bg-white"
-                                            placeholder="2024"
+                                            placeholder="2026"
                                         />
                                     </div>
                                     <div>
@@ -492,13 +506,13 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">VIN / שלדה</label>
+                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">מספר שלדה</label>
                                         <input
                                             type="text"
                                             value={vin}
                                             onChange={e => setVin(e.target.value)}
                                             className="input-premium px-4 py-3 text-base rounded-xl bg-white font-mono"
-                                            placeholder="ABC123..."
+                                            placeholder="VM1F..."
                                         />
                                     </div>
                                     <div>
@@ -518,7 +532,17 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                                             value={engineModel}
                                             onChange={e => setEngineModel(e.target.value)}
                                             className="input-premium px-4 py-3 text-base rounded-xl bg-white"
-                                            placeholder="Engine Code"
+                                            placeholder="G4FC"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">תוקף טסט</label>
+                                        <input
+                                            type="text"
+                                            value={registrationValidUntil}
+                                            onChange={e => setRegistrationValidUntil(e.target.value)}
+                                            className="input-premium px-4 py-3 text-base rounded-xl bg-white text-start font-mono"
+                                            placeholder="YYYY-MM-DD"
                                         />
                                     </div>
                                 </div>
@@ -531,7 +555,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
                                 className="input-premium h-32 py-4 resize-none"
-                                placeholder="פרט כאן את הבעיות שדווחו על ידי הלקוח..."
+                                placeholder="בקשות ספציפיות של הלקוח..."
                             />
                         </div>
 

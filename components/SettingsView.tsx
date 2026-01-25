@@ -196,8 +196,7 @@ const SettingsView: React.FC = () => {
     const getRoleLabel = (role: UserRole) => {
         switch (role) {
             case UserRole.SUPER_MANAGER: return 'מנהל ראשי';
-            case UserRole.DEPUTY_MANAGER: return 'סגן מנהל';
-            case UserRole.TEAM: return "צוות";
+            case UserRole.STAFF: return "צוות";
             case UserRole.CUSTOMER: return "לקוח";
             default: return role;
         }
@@ -445,8 +444,11 @@ const SettingsView: React.FC = () => {
 
             {/* Logout Button */}
             <button
-                onClick={() => signOut()}
-                className="w-full py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl md:rounded-3xl font-black text-base transition-all shadow-lg hover:shadow-xl active:scale-95 flex items-center justify-center gap-3"
+                onClick={() => {
+                    console.log('Sign out button clicked (SettingsView)');
+                    signOut();
+                }}
+                className="w-full py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl md:rounded-3xl font-black text-base transition-all shadow-lg hover:shadow-xl active:scale-95 flex items-center justify-center gap-3 cursor-pointer touch-manipulation"
             >
                 <LogOut size={22} />
                 <span>התנתק</span>
@@ -454,8 +456,8 @@ const SettingsView: React.FC = () => {
 
             {/* Version Info */}
             <div className="text-center py-4">
-                <p className="text-xs text-gray-400 font-bold">Sklack Garage OS v2.0.1</p>
-                <p className="text-xs text-gray-300 mt-1">© 2025 Sklack. All rights reserved.</p>
+                <p className="text-xs text-gray-400 font-bold">SklackOS v2.0.1</p>
+                <p className="text-xs text-gray-300 mt-1">© 2026 Sklack. All rights reserved</p>
             </div>
         </div>
     );

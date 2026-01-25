@@ -1,19 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-interface PushPayload {
-    userId: string
-    title: string
-    message: string // Changed from body to message
-    url?: string
-    taskId?: string
-    urgent?: boolean
-}
+import webpush from "npm:web-push"
+import { corsHeaders } from '../_shared/cors.ts'
+import { getSupabaseClient } from '../_shared/supabase-client.ts'
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') {
@@ -21,117 +9,88 @@ serve(async (req) => {
     }
 
     try {
-        const supabase = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        )
+        const supabase = getSupabaseClient()
 
-        const payload: PushPayload = await req.json()
+        // Setup VAPID
+        const vapidPublicKey = Deno.env.get('VITE_VAPID_PUBLIC_KEY') || Deno.env.get('VAPID_PUBLIC_KEY')
+        const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')
+        const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:admin@example.com'
+
+        if (!vapidPublicKey || !vapidPrivateKey) {
+            throw new Error('VAPID keys not configured')
+        }
+
+        try {
+            webpush.setVapidDetails(
+                vapidSubject,
+                vapidPublicKey,
+                vapidPrivateKey
+            )
+        } catch (err) {
+            console.error('Failed to set VAPID details:', err)
+            throw err
+        }
+
+        const payload = await req.json()
         const { userId, title, message, url, taskId, urgent } = payload
 
         console.log(`Sending push to user ${userId}: ${title}`)
 
-        // Get user's push subscriptions
         const { data: subscriptions, error: subError } = await supabase
             .from('push_subscriptions')
             .select('*')
             .eq('user_id', userId)
 
-        if (subError) {
-            console.error('Error fetching subscriptions:', subError)
-            throw subError
-        }
+        if (subError) throw subError
 
         if (!subscriptions || subscriptions.length === 0) {
-            console.log(`No push subscriptions found for user ${userId}`)
-            return new Response(
-                JSON.stringify({ message: 'No subscriptions found', userId }),
-                {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    status: 200,
-                }
-            )
+            console.log(`No subscriptions for user ${userId}`)
+            return new Response(JSON.stringify({ success: true, message: 'No subscriptions' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            })
         }
 
-        // VAPID keys for push delivery
-        const vapidPublicKey = Deno.env.get('VITE_VAPID_PUBLIC_KEY')
-        const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')
-
-        if (!vapidPublicKey || !vapidPrivateKey) {
-            throw new Error('VAPID keys not configured in Edge Function env')
-        }
-
-        // Prepare push notification payload for service worker
         const notificationPayload = JSON.stringify({
             title,
-            body: message, // Service worker expects 'body'
+            body: message,
             url: url || '/',
             taskId,
-            urgent: urgent || false,
-            tag: taskId ? `sklack-task-${taskId}` : `sklack-${Date.now()}`,
+            urgent,
+            tag: taskId ? `task-${taskId}` : `notif-${Date.now()}` // Threading
         })
 
-        // Send push to each subscription
-        const pushPromises = subscriptions.map(async (sub) => {
+        const promises = subscriptions.map(async (sub) => {
             try {
                 const subJson = typeof sub.subscription_json === 'string'
                     ? JSON.parse(sub.subscription_json)
                     : sub.subscription_json
 
-                // In production, we use a web-push library.
-                // For Supabase Edge Functions, we can use the native Fetch API 
-                // to send to the push service (FCM, Autopush, etc).
-                // This is a complex protocol, so here's the conceptual flow:
-
-                const endpoint = subJson.endpoint
-                const p256dh = subJson.keys?.p256dh
-                const auth = subJson.keys?.auth
-
-                if (!endpoint || !p256dh || !auth) {
-                    throw new Error('Invalid subscription format')
-                }
-
-                console.log(`Delivering push to endpoint ${endpoint.substring(0, 30)}...`)
-
-                // Note: Actual encryption and delivery using web-push protocol would go here.
-                // For this implementation, we assume the environment has the necessary setup
-                // or we're using a relay service.
-
-                return { success: true, endpoint }
+                await webpush.sendNotification(subJson, notificationPayload)
+                return { success: true, id: sub.id }
             } catch (error) {
-                console.error(`Failed to deliver push to subscription ${sub.id}:`, error)
-
-                // Optionally remove old/invalid subscriptions based on status code
-                // e.g., if (error.status === 410) delete subscription
-
-                return { success: false, error: error.message }
+                console.error(`Push error for sub ${sub.id}:`, error)
+                if (error.statusCode === 404 || error.statusCode === 410) {
+                    console.log(`Deleting invalid subscription ${sub.id}`)
+                    await supabase.from('push_subscriptions').delete().eq('id', sub.id)
+                }
+                return { success: false, id: sub.id, error: error.message }
             }
         })
 
-        const results = await Promise.all(pushPromises)
-        const deliveredCount = results.filter(r => r.success).length
+        const results = await Promise.all(promises)
+        const successCount = results.filter(r => r.success).length
 
-        return new Response(
-            JSON.stringify({
-                success: true,
-                userId,
-                subscriptionsFound: subscriptions.length,
-                delivered: deliveredCount,
-                results
-            }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            }
-        )
+        return new Response(JSON.stringify({ success: true, delivered: successCount, results }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        })
+
     } catch (error) {
         console.error('Error in send-push:', error)
-        return new Response(
-            JSON.stringify({ error: error.message }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            }
-        )
+        return new Response(JSON.stringify({ error: error.message }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500,
+        })
     }
 })

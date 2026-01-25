@@ -28,6 +28,7 @@ interface DataContextType {
     markNotificationRead: (id: string) => Promise<void>;
     markAllNotificationsRead: () => Promise<void>;
     lookupCustomerByPhone: (phone: string) => Promise<{ customer: any; vehicles: any[] } | null>;
+    sendSystemNotification: (userId: string, title: string, message: string, type: string, referenceId?: string) => Promise<void>;
     loadMoreTasks: () => Promise<void>;
     hasMoreTasks: boolean;
 }
@@ -70,6 +71,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (currProfile.role === UserRole.CUSTOMER) {
                 const { data: vParams } = await supabase.from('vehicles').select('*').eq('owner_id', myUserId);
+                results.vehicles = vParams || [];
+            } else if (currProfile.org_id) {
+                // For Staff/Managers, fetch all vehicles in org
+                const { data: vParams } = await supabase.from('vehicles')
+                    .select('*')
+                    .eq('org_id', currProfile.org_id)
+                    .order('created_at', { ascending: false });
                 results.vehicles = vParams || [];
             }
 
@@ -118,9 +126,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 loading: false,
                 hasMoreTasks: (tasksRes.data || []).length === 20 // If we got 20, there might be more
             }));
-        } catch (err) {
+        } catch (err: any) {
             console.error('Data refresh failed:', err);
-            toast.error('נכשל בעדכון הנתונים');
+            if (err.message === 'Failed to fetch' || !navigator.onLine) {
+                toast.error('אין חיבור לאינטרנט. מציג נתונים שמורים.');
+            } else {
+                toast.error('שגיאה בסנכרון הנתונים');
+            }
             setDataState(prev => ({ ...prev, loading: false }));
         }
     }, []); // Stable refreshData
@@ -266,8 +278,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status } : t)
             }));
             const { data: taskData } = await supabase.from('tasks').select('customer_id, title').eq('id', taskId).single();
-            const { error } = await supabase.from('tasks').update({ status }).eq('id', taskId);
+            const { data: updatedData, error } = await supabase.from('tasks').update({ status }).eq('id', taskId).select();
             if (error) throw error;
+            if (!updatedData || updatedData.length === 0) throw new Error('Permission denied: Unable to update task status.');
 
             // Notify customer on completion
             if (status === TaskStatus.COMPLETED && taskData?.customer_id) {
@@ -347,13 +360,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 assigned_to = [...assigned_to, currProfile.id];
             }
 
-            const { error: updateError } = await supabase.from('tasks').update({
+            const { data: updatedData, error: updateError } = await supabase.from('tasks').update({
                 assigned_to,
                 status: TaskStatus.IN_PROGRESS,
                 started_at: new Date().toISOString()
-            }).eq('id', taskId);
+            }).eq('id', taskId).select();
 
             if (updateError) throw updateError;
+            // Catch Silent RLS Failure: If no rows returned, the user didn't have permission to update THIS row
+            if (!updatedData || updatedData.length === 0) {
+                console.error('[DataContext] Update returned 0 rows. Likely RLS policy mismatch.');
+                throw new Error('Permission denied: Unable to update task status.');
+            }
 
             // 4. Notify Admins
             // Requirement: "Worker [Name] has started working on [Vehicle License Plate / Task ID]"
@@ -361,7 +379,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .from('profiles')
                 .select('id')
                 .eq('org_id', currProfile.org_id)
-                .in('role', [UserRole.SUPER_MANAGER, UserRole.DEPUTY_MANAGER]);
+                .eq('role', UserRole.SUPER_MANAGER);  // Only super managers get notifications
 
             // @ts-ignore
             const plate = currentTask.vehicle?.plate ? formatLicensePlate(currentTask.vehicle.plate) : '---';
@@ -391,9 +409,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             toast.success('המשימה נלקחה בצלחה');
             await refreshData();
-        } catch (e) {
+        } catch (e: any) {
             console.error('Claim failed:', e);
-            toast.error('נכשל בלקיחת המשימה');
+            toast.error(e.message === 'Permission denied: Unable to update task status.' 
+                ? 'אין לך הרשאה לבצע פעולה זו' 
+                : 'נכשל בלקיחת המשימה');
             refreshData(); // Rollback on error
         }
     }, [refreshData, sendSystemNotification]);
@@ -422,8 +442,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 status: assigned_to.length === 0 ? TaskStatus.WAITING : undefined
             };
 
-            const { error } = await supabase.from('tasks').update(updateData).eq('id', taskId);
+            const { data: updatedData, error } = await supabase.from('tasks').update(updateData).eq('id', taskId).select();
             if (error) throw error;
+            if (!updatedData || updatedData.length === 0) throw new Error('Permission denied: Unable to release task.');
             toast.success('המשימה שוחררה');
         } catch (e) {
             console.error('Release failed', e);
@@ -538,7 +559,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .from('profiles')
             .select('id')
             .eq('org_id', orgId)
-            .in('role', [UserRole.SUPER_MANAGER, UserRole.DEPUTY_MANAGER]);
+            .eq('role', UserRole.SUPER_MANAGER);  // Only super managers get notifications
 
         if (admins) {
             for (const admin of admins) {
@@ -592,8 +613,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
         try {
-            const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
+            const { data: updatedData, error } = await supabase.from('tasks').update(updates).eq('id', taskId).select();
             if (error) throw error;
+            if (!updatedData || updatedData.length === 0) throw new Error('Permission denied: Unable to update task.');
             await refreshData();
         } catch (e) {
             console.error('Update task failed:', e);
@@ -667,6 +689,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markNotificationRead,
         markAllNotificationsRead,
         lookupCustomerByPhone,
+        sendSystemNotification,
         loadMoreTasks
     }), [
         dataState,
@@ -686,6 +709,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markNotificationRead,
         markAllNotificationsRead,
         lookupCustomerByPhone,
+        sendSystemNotification,
         loadMoreTasks
     ]);
 

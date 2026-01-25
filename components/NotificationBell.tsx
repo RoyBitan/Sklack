@@ -16,8 +16,11 @@ interface Notification {
     task_id?: string;
 }
 
+import { useNavigate } from 'react-router-dom';
+
 const NotificationBell: React.FC = () => {
     const { profile } = useAuth();
+    const navigate = useNavigate();
     const { navigateTo } = useApp();
     const { notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useData();
     const [isOpen, setIsOpen] = useState(false);
@@ -92,8 +95,17 @@ const NotificationBell: React.FC = () => {
                                     className={`p-5 border-b border-gray-50 hover:bg-gray-50 transition-all cursor-pointer ${!n.is_read ? 'bg-blue-50/20' : ''}`}
                                     onClick={() => {
                                         if (!n.is_read) markNotificationRead(n.id);
-                                        // Deep link handling (simplified)
-                                        if (n.url) window.location.hash = n.url.replace('/#', '#');
+                                        // Deep link handling
+                                        if (n.url) {
+                                            const target = n.url.replace('/#', '').replace('#', '');
+                                            // Handle relative paths or AppView strings
+                                            if (target.startsWith('/')) {
+                                                navigate(target);
+                                            } else {
+                                                // If it's a view name, navigateTo handles it
+                                                navigateTo(target as any);
+                                            }
+                                        }
                                         setIsOpen(false);
                                     }}
                                 >

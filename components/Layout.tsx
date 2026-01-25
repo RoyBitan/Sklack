@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
+import { UserRole, AppView } from '../types';
 import {
   LogOut,
   Home,
@@ -16,10 +17,7 @@ import {
 import SklackLogo from './SklackLogo';
 import NotificationBell from './NotificationBell';
 import { useData } from '../contexts/DataContext';
-import { UserRole } from '../types';
-import GarageView from './GarageView';
-import SettingsView from './SettingsView';
-import LoadingSpinner from './LoadingSpinner';
+
 import { WifiOff } from 'lucide-react';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -57,8 +55,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   };
 
-  const NavItem = ({ view, icon: Icon, label }: { view: any, icon: any, label: string }) => {
-    const isActive = activeView === view;
+  const NavItem = ({ view, icon: Icon, label }: { view: AppView, icon: any, label: string }) => {
+    const isActive = activeView === view ||
+      (view === 'TASKS' && activeView === 'TASK_DETAIL') ||
+      (view === 'APPOINTMENTS' && activeView === 'REQUEST_DETAIL');
     return (
       <button
         onClick={() => navigateTo(view)}
@@ -74,9 +74,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   // Role-based bottom navigation items
-  const getBottomNavItems = () => {
-    const isAdmin = profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER;
-    const isWorker = profile.role === UserRole.TEAM;
+  const getBottomNavItems = (): { view: AppView, icon: any, label: string }[] => {
+    const isAdmin = profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.STAFF;
+    const isWorker = profile.role === UserRole.STAFF;
     const isCustomer = profile.role === UserRole.CUSTOMER;
 
     if (isAdmin) {
@@ -138,7 +138,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
             <nav className="flex gap-3">
               <NavItem view="DASHBOARD" icon={Home} label="דף הבית" />
-              {(profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER) && (
+              {(profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.STAFF) && (
                 <>
                   <NavItem view="TASKS" icon={Car} label="משימות" />
                   <NavItem view="APPOINTMENTS" icon={CalendarDays} label="תורים" />
@@ -155,7 +155,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <div className="flex items-center gap-6 pl-8 border-l border-gray-100">
               <div className="text-right">
                 <div className="text-base font-black text-gray-900 leading-none">{profile?.full_name?.split?.(' ')?.[0] || 'משתמש'}</div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1.5">{profile.role === UserRole.TEAM ? 'צוות' : profile.role}</div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1.5">{profile.role === UserRole.STAFF ? 'צוות' : profile.role}</div>
               </div>
               <button
                 onClick={() => signOut()}
@@ -186,7 +186,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Mobile Bottom Navigation - Role-Based */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-white/98 backdrop-blur-3xl border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-50 safe-area-inset-bottom">
         {bottomNavItems.map(({ view, icon: Icon, label }) => {
-          const isActive = activeView === view;
+          const isActive = activeView === view ||
+            (view === 'TASKS' && activeView === 'TASK_DETAIL') ||
+            (view === 'APPOINTMENTS' && activeView === 'REQUEST_DETAIL');
           return (
             <button
               key={view}

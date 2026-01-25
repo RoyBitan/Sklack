@@ -58,43 +58,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log(`[AuthContext] #${fetchId} Fetching profile for:`, userId);
 
         try {
-            const { data, error } = await supabase
+            // Fetch profile first
+            const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
-                .select('*, organization:organizations!org_id(name, garage_code)')
+                .select('*')
                 .eq('id', userId)
                 .maybeSingle();
 
             if (fetchId !== fetchIdRef.current) return;
 
-            if (error) {
-                console.error(`[AuthContext] #${fetchId} Error:`, error);
+            if (profileError) {
+                console.error(`[AuthContext] #${fetchId} Profile Error:`, profileError);
                 setAuthState(prev => ({
                     ...prev,
                     error: 'Failed to fetch profile',
                     profile: null,
                     loading: false
                 }));
-            } else {
-                console.log(`[AuthContext] #${fetchId} Success:`, data);
-
-                setAuthState(prev => {
-                    // Immediate Return Rule: If org_id hasn't changed, skip update to prevent loops
-                    if (prev.profile && data && prev.profile.org_id === (data as any).org_id && !prev.loading) {
-                        console.log('[AuthContext] org_id unchanged, skipping state update to prevent loop');
-                        return prev;
-                    }
-
-                    const isUnchanged = JSON.stringify(prev.profile) === JSON.stringify(data);
-                    if (isUnchanged && !prev.loading) return prev;
-
-                    return {
-                        ...prev,
-                        profile: data as Profile,
-                        error: null,
-                        loading: false
-                    };
-                });
+                return;
             }
+
+            // If profile has org_id, fetch organization separately
+            let organizationData = null;
+            if (profileData?.org_id) {
+                const { data: orgData, error: orgError } = await supabase
+                    .from('organizations')
+                    .select('name, garage_code')
+                    .eq('id', profileData.org_id)
+                    .maybeSingle();
+
+                if (!orgError && orgData) {
+                    organizationData = orgData;
+                }
+            }
+
+            // Combine the data
+            const data = profileData ? {
+                ...profileData,
+                organization: organizationData
+            } : null;
+
+            if (fetchId !== fetchIdRef.current) return;
+
+            console.log(`[AuthContext] #${fetchId} Success:`, data);
+
+            setAuthState(prev => {
+                // Immediate Return Rule: If org_id hasn't changed, skip update to prevent loops
+                if (prev.profile && data && prev.profile.org_id === (data as any).org_id && !prev.loading) {
+                    console.log('[AuthContext] org_id unchanged, skipping state update to prevent loop');
+                    return prev;
+                }
+
+                const isUnchanged = JSON.stringify(prev.profile) === JSON.stringify(data);
+                if (isUnchanged && !prev.loading) return prev;
+
+                return {
+                    ...prev,
+                    profile: data as Profile,
+                    error: null,
+                    loading: false
+                };
+            });
         } catch (err: any) {
             console.error(`[AuthContext] #${fetchId} Exception:`, err);
             setAuthState(prev => ({
@@ -152,23 +176,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             handleAuth(sess);
         });
 
+        // Real-time Profile Updates (Role Changes)
+        let profileSubscription: any = null;
+        if (authState.user) {
+            profileSubscription = supabase
+                .channel(`profile-updates-${authState.user.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'profiles',
+                        filter: `id=eq.${authState.user.id}`
+                    },
+                    (payload) => {
+                        console.log('[AuthContext] Real-time profile update received:', payload);
+                        fetchProfile(authState.user!.id);
+                    }
+                )
+                .subscribe();
+        }
+
         return () => {
             mounted = false;
             if (failSafeTimerRef.current) clearTimeout(failSafeTimerRef.current);
             subscription.unsubscribe();
+            if (profileSubscription) supabase.removeChannel(profileSubscription);
         };
-    }, [fetchProfile]);
+    }, [fetchProfile, authState.user?.id]); // Re-subscribe if user ID changes
 
     const signOut = useCallback(async () => {
+        console.log('[AuthContext] Sign out initiated');
         setAuthState(prev => ({ ...prev, loading: true }));
-        await supabase.auth.signOut();
-        setAuthState({
-            user: null,
-            session: null,
-            profile: null,
-            loading: false,
-            error: null
-        });
+        try {
+            await supabase.auth.signOut();
+            console.log('[AuthContext] Supabase signOut completed');
+        } catch (error) {
+            console.error('[AuthContext] Supabase signOut failed', error);
+        } finally {
+            console.log('[AuthContext] Clearing local auth state');
+            setAuthState({
+                user: null,
+                session: null,
+                profile: null,
+                loading: false,
+                error: null
+            });
+            // Force reload to clear any other in-memory states
+            // window.location.href = '/login'; // Optional: might be too aggressive, let router handle it
+        }
     }, []);
 
     const refreshProfile = useCallback(async () => {

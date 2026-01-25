@@ -28,7 +28,7 @@ self.addEventListener('activate', event => {
             );
         })
     );
-    self.claim();
+    self.clients.claim();
 });
 
 // Fetch with Stale-While-Revalidate Strategy

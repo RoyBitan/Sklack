@@ -3,12 +3,15 @@ import { supabase } from '../lib/supabase';
 import { Task, TaskStatus, Vehicle } from '../types';
 import { Car, Clock, CheckCircle2, Wrench, Phone, MapPin } from 'lucide-react';
 import SklackLogo from './SklackLogo';
+import { useParams } from 'react-router-dom';
 
 interface PublicOrderStatusProps {
-    taskId: string;
+    taskId?: string;
 }
 
-const PublicOrderStatus: React.FC<PublicOrderStatusProps> = ({ taskId }) => {
+const PublicOrderStatus: React.FC<PublicOrderStatusProps> = ({ taskId: propTaskId }) => {
+    const { taskId: urlTaskId } = useParams<{ taskId: string }>();
+    const taskId = propTaskId || urlTaskId;
     const [task, setTask] = useState<Task | null>(null);
     const [vehicle, setVehicle] = useState<Vehicle | null>(null);
     const [loading, setLoading] = useState(true);
@@ -25,9 +28,37 @@ const PublicOrderStatus: React.FC<PublicOrderStatusProps> = ({ taskId }) => {
                         vehicle:vehicles(*)
                     `)
                     .eq('id', taskId)
-                    .single();
+                    .maybeSingle();
 
                 if (taskError) throw taskError;
+
+                if (!taskData) {
+                    setError('לא נמצאה משימה עם המזהה הזה');
+                    return;
+                }
+
+                // IDOR Protection: Check session ownership if logged in
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', session.user.id)
+                        .single();
+
+                    // If user is a customer, they must own the task
+                    if (profile?.role === 'CUSTOMER') {
+                        const isOwner = taskData.customer_id === session.user.id ||
+                            taskData.created_by === session.user.id ||
+                            taskData.vehicle?.owner_id === session.user.id;
+
+                        if (!isOwner) {
+                            setError('אין לך הרשאה לצפות במשימה זו');
+                            setLoading(false);
+                            return;
+                        }
+                    }
+                }
 
                 setTask(taskData);
                 setVehicle(taskData.vehicle);

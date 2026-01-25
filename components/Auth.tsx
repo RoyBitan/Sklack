@@ -172,7 +172,7 @@ const Auth: React.FC = () => {
                                 <label className="block text-[10px] font-black text-gray-400 mb-3 px-2 uppercase tracking-widest text-start">בחר סוג משתמש</label>
                                 <div className="grid grid-cols-3 gap-3">
                                     <RoleOption role={UserRole.SUPER_MANAGER} icon={Briefcase} label="מנהל" desc="פתיחת מוסך" />
-                                    <RoleOption role={UserRole.TEAM} icon={Users} label="עובד" desc="הצטרפות לצוות" />
+                                    <RoleOption role={UserRole.STAFF} icon={Users} label="עובד" desc="הצטרפות לצוות" />
                                     <RoleOption role={UserRole.CUSTOMER} icon={User} label="לקוח" desc="מעקב אישי" />
                                 </div>
                             </div>

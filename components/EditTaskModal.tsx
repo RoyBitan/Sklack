@@ -18,9 +18,6 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
     const [isUrgent, setIsUrgent] = useState(task.priority === Priority.URGENT || task.priority === Priority.CRITICAL);
-    const [status, setStatus] = useState<TaskStatus>(task.status);
-    const [year, setYear] = useState(task.vehicle_year || '');
-    const [immobilizer, setImmobilizer] = useState(task.immobilizer_code || '');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,9 +31,6 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
                     title,
                     description,
                     priority: isUrgent ? Priority.URGENT : Priority.NORMAL,
-                    status,
-                    vehicle_year: year,
-                    immobilizer_code: immobilizer,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', task.id);
@@ -59,7 +53,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
                 <div className="px-6 py-5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-white sm:rounded-t-[2rem] sticky top-0 z-10 shrink-0">
                     <div>
                         <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tighter">עריכת משימה</h2>
-                        <p className="text-[10px] sm:text-xs font-black text-emerald-500 uppercase tracking-[0.2em] mt-1">עדכון פרטי טיפול ורכב</p>
+                        <p className="text-[10px] sm:text-xs font-black text-emerald-500 uppercase tracking-[0.2em] mt-1">עדכון פרטי המשימה</p>
                     </div>
                     <button onClick={onClose} className="w-10 h-10 sm:w-14 sm:h-14 flex items-center justify-center bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all active:scale-90 touch-target">
                         <X size={20} />
@@ -77,41 +71,6 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, onClose }) => {
                                 onChange={e => setTitle(e.target.value)}
                                 className="input-premium px-4 py-3 text-base rounded-xl"
                             />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">שנתון רכב</label>
-                                <input
-                                    type="text"
-                                    value={year}
-                                    onChange={e => setYear(e.target.value)}
-                                    className="input-premium px-4 py-3 text-base rounded-xl"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">אימובילייזר / קודנית</label>
-                                <input
-                                    type="text"
-                                    value={immobilizer}
-                                    onChange={e => setImmobilizer(e.target.value)}
-                                    className="input-premium px-4 py-3 text-base rounded-xl font-mono text-center tracking-widest"
-                                    placeholder="1234"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-[11px] font-black text-gray-400 mb-3 px-2 uppercase tracking-[0.3em] text-start">סטטוס</label>
-                            <select
-                                value={status}
-                                onChange={e => setStatus(e.target.value as TaskStatus)}
-                                className="input-premium font-bold"
-                            >
-                                {Object.values(TaskStatus).map(s => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
                         </div>
 
                         <div>

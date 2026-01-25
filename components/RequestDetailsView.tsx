@@ -1,27 +1,50 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { useApp } from '../contexts/AppContext';
-import { Task, TaskStatus, UserRole } from '../types';
+import { useParams, useNavigate } from 'react-router-dom';
+import { TaskStatus } from '../types';
 import {
     CalendarDays,
     MessageSquare,
     User,
     Phone,
     ArrowRight,
-    X,
-    Clock,
     Check
 } from 'lucide-react';
 import { formatLicensePlate } from '../utils/formatters';
+import { toast } from 'sonner';
 
 const RequestDetailsView: React.FC = () => {
+    const { id: urlRequestId } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const { profile } = useAuth();
-    const { tasks, approveTask, updateTaskStatus } = useData();
-    const { selectedRequestId, setSelectedRequestId, navigateTo } = useApp();
+    const { tasks, approveTask } = useData();
+    const { setSelectedRequestId, navigateTo } = useApp();
     const [isUpdating, setIsUpdating] = useState(false);
 
-    const request = useMemo(() => tasks.find(t => t.id === selectedRequestId), [tasks, selectedRequestId]);
+    // Sync context with URL param
+    useEffect(() => {
+        if (urlRequestId) {
+            setSelectedRequestId(urlRequestId);
+        }
+        return () => setSelectedRequestId(null);
+    }, [urlRequestId, setSelectedRequestId]);
+
+    const request = useMemo(() => tasks.find(t => t.id === urlRequestId), [tasks, urlRequestId]);
+
+    // IDOR Protection: Customers can ONLY view their own requests
+    useEffect(() => {
+        if (!request || !profile) return;
+
+        if (profile.role === 'CUSTOMER' &&
+            request.customer_id !== profile.id &&
+            request.vehicle?.owner_id !== profile.id) {
+
+            navigate('/appointments');
+            toast.error('אין לך הרשאה לצפות בבקשה זו');
+        }
+    }, [request, profile, navigate]);
 
     const serviceLabels: Record<string, string> = {
         'ROUTINE_SERVICE': 'טיפול תקופתי',
@@ -136,7 +159,7 @@ const RequestDetailsView: React.FC = () => {
                             </div>
                         </div>
                         <a
-                            href={`tel:${request.vehicle?.owner?.phone || (request.metadata as any)?.ownerPhone}`}
+                            href={`tel:${request.vehicle?.owner?.phone || (request.metadata as any)?.ownerPhone} `}
                             className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 text-start group hover:border-green-200 transition-colors"
                         >
                             <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600 mb-3"><Phone size={20} /></div>

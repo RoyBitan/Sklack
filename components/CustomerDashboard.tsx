@@ -15,13 +15,14 @@ import { compressImage, uploadAsset } from '../utils/assetUtils';
 import { fetchVehicleDataFromGov, isValidIsraeliPlate } from '../utils/vehicleApi';
 import { normalizePhone, isValidPhone } from '../utils/phoneUtils';
 import LoadingSpinner from './LoadingSpinner';
+import { toast } from 'sonner';
 
 import VehicleCard from './VehicleCard';
 import CustomerTaskCard from './CustomerTaskCard';
 
 const CustomerDashboard: React.FC = () => {
     const { user, t, navigateTo } = useApp();
-    const { profile, user: authUser } = useAuth();
+    const { profile, user: authUser, refreshProfile } = useAuth();
     const { tasks, loading, deleteTask, refreshData, approveTask, updateTask, submitCheckIn, hasMoreTasks, loadMoreTasks, vehicles, updateTaskStatus, updateProposal, addProposal, updateUser, addVehicle, removeVehicle } = useData();
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -32,6 +33,10 @@ const CustomerDashboard: React.FC = () => {
     const [isRecording, setIsRecording] = useState(false);
     const [hasAudio, setHasAudio] = useState(false);
     const [requestPhoto, setRequestPhoto] = useState<File | null>(null);
+    const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+
+
 
     // Vehicle Modal State
     const [showAddVehicle, setShowAddVehicle] = useState(false);
@@ -84,7 +89,7 @@ const CustomerDashboard: React.FC = () => {
                     .from('profiles')
                     .select('phone')
                     .eq('org_id', profile.org_id)
-                    .in('role', ['SUPER_MANAGER', 'DEPUTY_MANAGER'])
+                    .eq('role', 'SUPER_MANAGER')  // Only super managers
                     .limit(1)
                     .single();
                 if (data?.phone) setGaragePhone(data.phone);
@@ -135,7 +140,7 @@ const CustomerDashboard: React.FC = () => {
                 window.location.href = '/';
             } catch (e) {
                 console.error(e);
-                alert('שגיאה בתהליך ההתנתקות. נסה שנית.');
+                toast.error('שגיאה בתהליך ההתנתקות. נסה שנית.');
             }
         }
     };
@@ -145,7 +150,7 @@ const CustomerDashboard: React.FC = () => {
         setTimeout(() => {
             setProcessingId(null);
             updateTaskStatus(taskId, TaskStatus.COMPLETED);
-            alert(t('paymentSuccessful'));
+            toast.success(t('paymentSuccessful'));
         }, 1500);
     };
 
@@ -176,46 +181,126 @@ const CustomerDashboard: React.FC = () => {
             setCapturedImage(null);
         } catch (err) {
             console.error('Request submission failed:', err);
-            alert('שליחת הבקשה נכשלה');
+            toast.error('שליחת הבקשה נכשלה');
         } finally {
             setIsSubmitting(false);
         }
     };
+    const handleDocUpload = async (type: string, file: File) => {
+        if (!user?.id) return;
+        
+        try {
+            setUploadingDoc(type);
+            setUploadProgress(prev => ({ ...prev, [type]: 0 }));
 
-    const handleDocUpload = async (type: 'carLicense' | 'insurance' | 'idCard', file: File) => {
+            // Simulate progress while compressing/starting
+            const interval = setInterval(() => {
+                setUploadProgress(prev => {
+                    const curr = prev[type] || 0;
+                    if (curr >= 90) return prev;
+                    return { ...prev, [type]: curr + 10 };
+                });
+            }, 200);
+            
+            // 1. Prepare File
+            let fileToUpload: File | Blob = file;
+            const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+
+            if (file.type.startsWith('image/')) {
+                fileToUpload = await compressImage(file, 1200, 1200, 0.7);
+            }
+
+            const filePath = `${user.id}/${type}-${Date.now()}.${fileExt}`;
+
+            // 2. Upload to Storage
+            const publicUrl = await uploadAsset(fileToUpload, 'documents', filePath);
+            
+            clearInterval(interval);
+            setUploadProgress(prev => ({ ...prev, [type]: 100 }));
+
+            // 3. Update Database direct
+            const { data: currProfile } = await supabase
+                .from('profiles')
+                .select('documents')
+                .eq('id', user.id)
+                .single();
+
+            const currentDocs = currProfile?.documents || {};
+            const updatedDocs = { ...currentDocs, [type]: publicUrl };
+
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ documents: updatedDocs })
+                .eq('id', user.id);
+
+            if (updateError) throw updateError;
+
+            // 4. Success & Refresh
+            toast.success('המסמך הועלה בהצלחה');
+            if (refreshProfile) await refreshProfile(); 
+            
+        } catch (error) {
+            console.error('Doc upload failed:', error);
+            toast.error('שגיאה בהעלאת המסמך');
+        } finally {
+            setUploadingDoc(null);
+            setTimeout(() => {
+                setUploadProgress(prev => {
+                    const next = { ...prev };
+                    delete next[type];
+                    return next;
+                });
+            }, 1000);
+        }
+    };
+
+    const handleDocDelete = async (type: string) => {
+        if (!user?.id || !confirm('האם אתה בטוח שברצונך למחוק את המסמך?')) return;
+
         try {
             setIsSubmitting(true);
-            const compressed = await compressImage(file, 1200, 1200, 0.7);
-            const fileExt = file.name.split('.').pop() || 'jpg';
-            const filePath = `${user!.id}/${type}-${Date.now()}.${fileExt}`;
+            
+            // 1. Get current docs
+            const { data: currProfile } = await supabase
+                .from('profiles')
+                .select('documents')
+                .eq('id', user.id)
+                .single();
 
-            const publicUrl = await uploadAsset(compressed, 'documents', filePath);
+            const currentDocs = currProfile?.documents || {};
+            
+            // 2. Create updated object with null for specifically this type
+            const updatedDocs = { ...currentDocs, [type]: null };
 
-            await updateUser(user!.id, {
-                documents: {
-                    ...(user?.documents || {}),
-                    [type]: publicUrl
-                }
-            });
-            alert(t('upload') + " " + t(type === 'carLicense' ? 'carLicense' : type === 'insurance' ? 'insuranceDoc' : 'idCardDoc') + " בהצלחה!");
-        } catch (err) {
-            console.error('Doc upload failed', err);
-            alert('העלאה נכשלה');
+            // 3. Update DB
+            const { error } = await supabase
+                .from('profiles')
+                .update({ documents: updatedDocs })
+                .eq('id', user.id);
+
+            if (error) throw error;
+
+            toast.success('המסמך נמחק בהצלחה');
+            if (refreshProfile) await refreshProfile();
+        } catch (error) {
+            console.error('Delete failed:', error);
+            toast.error('מחיקת המסמך נכשלה');
         } finally {
             setIsSubmitting(false);
         }
     };
+
 
     const handleAddVehicleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newVehicle.plate || !newVehicle.model) {
-            alert('אנא הזן מספר רישוי ולחץ על כפתור הקסם כדי לטעון את פרטי הרכב לפני השמירה');
+            toast.error('אנא הזן מספר רישוי ולחץ על כפתור הקסם כדי לטעון את פרטי הרכב לפני השמירה');
             return;
         }
 
         const cleanedPlate = cleanLicensePlate(newVehicle.plate);
         if (cleanedPlate.length < 7) {
-            alert('מספר רישוי לא תקין (דרושות 7-8 ספרות)');
+            toast.error('מספר רישוי לא תקין (דרושות 7-8 ספרות)');
             return;
         }
 
@@ -232,6 +317,19 @@ const CustomerDashboard: React.FC = () => {
         };
 
         try {
+            // Pre-check for duplicate vehicle
+            const { data: existingVehicle } = await supabase
+                .from('vehicles')
+                .select('id')
+                .eq('plate', cleanedPlate)
+                .eq('org_id', profile.org_id)
+                .maybeSingle();
+
+            if (existingVehicle) {
+                toast.error('הרכב כבר קיים במערכת');
+                return;
+            }
+
             const { error } = await supabase.from('vehicles').insert({
                 org_id: profile.org_id,
                 owner_id: user?.id,
@@ -247,7 +345,13 @@ const CustomerDashboard: React.FC = () => {
                 kodanit: sanitize(newVehicle.kodanit)
             });
 
-            if (error) throw error;
+            if (error) {
+                if (error.code === '23505' || error.message.includes('unique constraint')) {
+                    toast.error('הרכב כבר קיים במערכת');
+                    return;
+                }
+                throw error;
+            }
             await refreshData();
             setNewVehicle({
                 plate: '', model: '', year: '', color: '',
@@ -257,7 +361,7 @@ const CustomerDashboard: React.FC = () => {
             setShowAddVehicle(false);
         } catch (error) {
             console.error('Error adding vehicle:', error);
-            alert('שגיאה בשמירת הרכב. אנא בדוק את הנתונים ונסה שנית.');
+            toast.error('שגיאה בשמירת הרכב. אנא בדוק את הנתונים ונסה שנית.');
         }
     };
 
@@ -270,13 +374,13 @@ const CustomerDashboard: React.FC = () => {
         // Validation
         const normalizedPhone = normalizePhone(checkInForm.ownerPhone);
         if (!isValidPhone(normalizedPhone)) {
-            alert('מספר טלפון לא תקין (דרושות 10 ספרות)');
+            toast.error('מספר טלפון לא תקין (דרושות 10 ספרות)');
             setIsSubmitting(false);
             return;
         }
 
         if (!checkInForm.ownerName.trim()) {
-            alert('נא להזין שם מלא');
+            toast.error('נא להזין שם מלא');
             setIsSubmitting(false);
             return;
         }
@@ -321,7 +425,7 @@ const CustomerDashboard: React.FC = () => {
             await refreshData();
         } catch (err) {
             console.error('Submit failed:', err);
-            alert('פעולה נכשלה. אנא נסה שוב.');
+            toast.error('פעולה נכשלה. אנא נסה שוב.');
         } finally {
             setIsSubmitting(false);
         }
@@ -466,7 +570,7 @@ const CustomerDashboard: React.FC = () => {
                                             disabled={loadingApi}
                                             onClick={async () => {
                                                 const plate = cleanLicensePlate(newVehicle.plate || '');
-                                                if (!isValidIsraeliPlate(plate)) return alert('מספר לא תקין');
+                                                if (!isValidIsraeliPlate(plate)) return toast.error('מספר לא תקין');
                                                 setLoadingApi(true);
                                                 try {
                                                     const data = await fetchVehicleDataFromGov(plate);
@@ -477,7 +581,6 @@ const CustomerDashboard: React.FC = () => {
                                                             if (isNaN(date.getTime())) return dateStr;
                                                             return date.toLocaleDateString('en-GB');
                                                         };
-
                                                         setNewVehicle({
                                                             ...newVehicle,
                                                             model: `${data.make} ${data.model}`,
@@ -489,10 +592,10 @@ const CustomerDashboard: React.FC = () => {
                                                             registration_valid_until: formatDate(data.registrationValidUntil)
                                                         });
                                                     } else {
-                                                        alert('לא נמצאו נתונים לרכב זה. אנא נסה שנית או הזן ידנית.');
+                                                        toast.error('לא נמצאו נתונים לרכב זה. אנא נסה שנית או הזן ידנית.');
                                                     }
                                                 } catch (e) {
-                                                    alert('שגיאה בטעינת נתונים');
+                                                    toast.error('שגיאה בטעינת נתונים');
                                                 } finally {
                                                     setLoadingApi(false);
                                                 }
@@ -788,41 +891,111 @@ const CustomerDashboard: React.FC = () => {
                 )}
             </section>
 
+
+
             {/* Documents Section */}
-            <section className="bg-white rounded-[2.5rem] p-8 border-2 border-gray-100 shadow-sm">
-                <div className="flex items-center gap-3 mb-8 px-1 text-start">
-                    <FileText className="text-blue-500" size={24} />
-                    <h3 className="font-black text-2xl tracking-tight text-gray-900">המסמכים שלי</h3>
+            <section className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white/20 shadow-2xl relative overflow-hidden group/docs">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                
+                <div className="flex items-center gap-4 mb-10 px-1 text-start relative">
+                    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                        <FileText size={24} />
+                    </div>
+                    <div>
+                        <h3 className="font-black text-2xl tracking-tight text-gray-900">המסמכים שלי</h3>
+                        <p className="text-gray-400 text-xs font-bold mt-0.5">נהל את מסמכי הרכב והזיהוי שלך במקום אחד</p>
+                    </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
                     {[
-                        { id: 'carLicense', label: 'רישיון רכב', icon: <Car size={22} /> },
-                        { id: 'insurance', label: 'ביטוח חובה', icon: <Shield size={22} /> },
-                        { id: 'idCard', label: 'תעודת זהות', icon: <UserCircle2 size={22} /> },
-                    ].map(doc => (
-                        <div key={doc.id} className="relative group overflow-hidden bg-gray-50 rounded-2xl p-6 border border-gray-100 flex flex-col items-center text-center transition-all hover:border-black/10 hover:bg-white hover:shadow-md">
-                            <div className={`w-14 h-14 rounded-2xl mb-4 flex items-center justify-center transition-colors ${user?.documents?.[doc.id] ? 'bg-green-100 text-green-600 shadow-sm' : 'bg-white text-gray-300 shadow-sm'}`}>
-                                {doc.icon}
+                        { id: 'carLicense', label: 'רישיון רכב', icon: <Car size={24} /> },
+                        { id: 'insurance', label: 'ביטוח חובה בתוקף', icon: <Shield size={24} /> },
+                        { id: 'idCard', label: 'תעודת זהות', icon: <UserCircle2 size={24} /> },
+                    ].map(doc => {
+                         const docUrl = user?.documents?.[doc.id];
+                         const isUploading = uploadingDoc === doc.id;
+                         const progress = uploadProgress[doc.id] || 0;
+                         
+                         return (
+                            <div key={doc.id} className="relative bg-white/60 backdrop-blur-md rounded-[2rem] p-8 border border-white flex flex-col items-center text-center transition-all hover:shadow-xl hover:-translate-y-1 group/card">
+                                {/* Icon / Status Indicator */}
+                                <div className={`w-20 h-20 rounded-[1.75rem] mb-6 flex items-center justify-center transition-all duration-500 relative ${docUrl ? 'bg-emerald-100 text-emerald-600 shadow-emerald-100' : 'bg-gray-50 text-gray-300'} shadow-xl`}>
+                                    {isUploading ? (
+                                        <div className="relative w-full h-full flex items-center justify-center">
+                                            <svg className="w-16 h-16 transform -rotate-90">
+                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-blue-100" />
+                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-blue-600" style={{ strokeDasharray: '176', strokeDashoffset: `${176 - (progress / 100) * 176}`, transition: 'stroke-dashoffset 0.3s ease' }} />
+                                            </svg>
+                                            <span className="absolute text-[10px] font-black text-blue-600">{progress}%</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {doc.icon}
+                                            {docUrl && (
+                                                <div className="absolute -top-2 -right-2 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center text-white border-4 border-white animate-bounce-in">
+                                                    <Check size={14} strokeWidth={4} />
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                                
+                                <div className="text-base font-black text-gray-800 mb-6">{doc.label}</div>
+                                
+                                {/* Progress Bar (Traditional) */}
+                                {isUploading && (
+                                    <div className="w-full h-1.5 bg-blue-50 rounded-full mb-6 overflow-hidden">
+                                        <div 
+                                            className="h-full bg-blue-600 transition-all duration-300 rounded-full shadow-[0_0_10px_rgba(37,99,235,0.4)]"
+                                            style={{ width: `${progress}%` }}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="flex flex-col gap-3 w-full">
+                                    {!docUrl ? (
+                                        <label className={`w-full py-4 rounded-2xl font-black text-sm cursor-pointer transition-all flex items-center justify-center gap-3 active:scale-95 ${isUploading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800 shadow-lg'}`}>
+                                            <Upload size={18} />
+                                            {isUploading ? 'מעלה...' : 'בחר תמונה או PDF'}
+                                            <input 
+                                                type="file" 
+                                                className="hidden" 
+                                                accept="image/*,application/pdf"
+                                                disabled={isUploading}
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) handleDocUpload(doc.id, file);
+                                                }}
+                                            />
+                                        </label>
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <a 
+                                                href={docUrl} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="flex items-center justify-center gap-2 py-3.5 bg-blue-600 text-white rounded-2xl font-black text-xs hover:bg-blue-700 transition-all shadow-lg active:scale-95"
+                                            >
+                                                <Link size={16} /> 
+                                                צפייה
+                                            </a>
+                                            <button 
+                                                onClick={() => handleDocDelete(doc.id)}
+                                                className="flex items-center justify-center gap-2 py-3.5 bg-red-50 text-red-600 rounded-2xl font-black text-xs hover:bg-red-100 transition-all active:scale-95"
+                                            >
+                                                <Trash2 size={16} />
+                                                מחיקה
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <div className="text-sm font-black text-gray-800 mb-2">{doc.label}</div>
-                            <label
-                                className={`text-[11px] font-black px-6 py-2.5 rounded-full cursor-pointer transition-all ${user?.documents?.[doc.id] ? 'bg-green-600 text-white' : 'bg-black text-white hover:bg-gray-800 shadow-md'}`}
-                            >
-                                {user?.documents?.[doc.id] ? 'הוחלף' : 'העלאה'}
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) handleDocUpload(doc.id as any, file);
-                                    }}
-                                />
-                            </label>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </section>
+
 
             {/* Request Form Modal */}
             {showRequestForm && (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, Car, User, Calendar, Palette, Download, Loader, ChevronDown } from 'lucide-react';
+import { X, CheckCircle2, Car, User, Calendar, Palette, Download, Loader, ChevronDown, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatLicensePlate, cleanLicensePlate } from '../utils/formatters';
@@ -110,6 +110,18 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose, onSuccess })
             const cleanedPlate = cleanLicensePlate(plate);
             if (cleanedPlate.length < 7) throw new Error('מספר רישוי לא תקין');
 
+            // Pre-check for duplicate vehicle
+            const { data: existingVehicle } = await supabase
+                .from('vehicles')
+                .select('id')
+                .eq('plate', cleanedPlate)
+                .eq('org_id', profile.org_id)
+                .maybeSingle();
+
+            if (existingVehicle) {
+                throw new Error('הרכב כבר קיים במערכת');
+            }
+
             let ownerId = null;
             if (ownerPhone) {
                 const { data: user } = await supabase.from('profiles').select('id').eq('phone', ownerPhone).maybeSingle();
@@ -132,7 +144,10 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose, onSuccess })
             });
 
             if (insertError) {
-                if (insertError.code === '23505') throw new Error('רכב עם מספר רישוי זה כבר קיים במוסך');
+                // Fallback for race conditions
+                if (insertError.code === '23505' || insertError.message.includes('unique constraint') || insertError.message.includes('unique_violation')) {
+                    throw new Error('הרכב כבר קיים במערכת');
+                }
                 throw insertError;
             }
 
@@ -176,11 +191,16 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose, onSuccess })
 
                         <div className="space-y-1">
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 text-start">מספר רישוי</label>
-                            <div className="flex gap-2">
-                                <input type="text" required className="input-premium font-mono tracking-widest text-center text-xl h-14 flex-1" placeholder="12-345-67" dir="ltr" value={plate} onChange={e => setPlate(formatLicensePlate(e.target.value))} />
-                                <button type="button" onClick={handleAutoFill} disabled={loadingApi} className={`flex items-center gap-2 px-6 rounded-2xl font-black text-[10px] transition-all shrink-0 ${apiSuccess ? 'bg-green-500 text-white' : 'bg-black text-white hover:bg-gray-800'}`}>
-                                    {loadingApi ? <Loader size={16} className="animate-spin" /> : apiSuccess ? <CheckCircle2 size={16} /> : <Download size={16} />}
-                                    {apiSuccess ? 'עודכן!' : 'משוך נתוני משרד הרישוי'}
+                            <div className="relative">
+                                <input type="text" required className="input-premium font-mono tracking-widest text-center text-xl h-14 w-full pr-14" placeholder="12-345-67" dir="ltr" value={plate} onChange={e => setPlate(formatLicensePlate(e.target.value))} />
+                                <button
+                                    type="button"
+                                    onClick={handleAutoFill}
+                                    disabled={loadingApi}
+                                    className="absolute right-2 top-2 bottom-2 w-10 flex items-center justify-center rounded-xl bg-black text-white hover:bg-gray-800 disabled:bg-gray-400 transition-colors"
+                                    title="Magic Fetch from DataGov"
+                                >
+                                    {loadingApi ? <Loader size={16} className="animate-spin" /> : apiSuccess ? <CheckCircle2 size={16} /> : <Sparkles size={16} />}
                                 </button>
                             </div>
                         </div>
@@ -188,7 +208,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose, onSuccess })
                         {/* Primary Display */}
                         <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 flex items-center justify-between">
                             <div className="text-start">
-                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Make, Model, Year</div>
+                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">יצרן, דגם, שנה</div>
                                 <div className="text-lg sm:text-xl font-black text-black tracking-tight uppercase">
                                     {model || '---'} {year ? `(${year})` : ''}
                                 </div>
@@ -206,18 +226,18 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose, onSuccess })
                             <div className="space-y-4 animate-fade-in-up bg-gray-50/50 p-6 rounded-3xl border border-dashed border-gray-200 text-start">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">קודנית (Kodanit)</label>
-                                        <input type="text" className="input-premium h-12 font-mono tracking-widest text-center bg-white border-gray-100 uppercase" placeholder="1234" value={kodanit} onChange={e => setKodanit(e.target.value)} />
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">קודנית</label>
+                                        <input type="text" className="input-premium h-12 font-mono tracking-widest text-start bg-white border-gray-100 uppercase" placeholder="1234" value={kodanit} onChange={e => setKodanit(e.target.value)} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">דגם מנוע</label>
-                                        <input type="text" className="input-premium h-12 bg-white border-gray-100 uppercase font-mono text-sm" placeholder="ABC" value={engineModel} onChange={e => setEngineModel(e.target.value)} />
+                                        <input type="text" className="input-premium h-12 bg-white border-gray-100 uppercase font-mono text-sm" placeholder="G4FC" value={engineModel} onChange={e => setEngineModel(e.target.value)} />
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">צבע חיצוני</label>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">צבע</label>
                                         <input type="text" className="input-premium h-12 bg-white border-gray-100" placeholder="לבן" value={color} onChange={e => setColor(e.target.value)} />
                                     </div>
                                     <div className="space-y-1">
@@ -228,8 +248,8 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose, onSuccess })
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">VIN / שלדה</label>
-                                        <input type="text" className="input-premium h-12 font-mono text-xs bg-white border-gray-100 uppercase" placeholder="ABC123..." value={vin} onChange={e => setVin(e.target.value)} />
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">מספר שלדה</label>
+                                        <input type="text" className="input-premium h-12 font-mono text-xs bg-white border-gray-100 uppercase" placeholder="VMF1..." value={vin} onChange={e => setVin(e.target.value)} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">סוג דלק</label>

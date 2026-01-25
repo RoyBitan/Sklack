@@ -10,6 +10,7 @@ import EditGarageCodeModal from './EditGarageCodeModal';
 import LoadingSpinner from './LoadingSpinner';
 import { UserRole, MembershipStatus } from '../types';
 import QRCode from 'qrcode';
+import { toast } from 'sonner';
 
 type GarageTab = 'VEHICLES' | 'TEAM' | 'CUSTOMERS';
 
@@ -102,7 +103,7 @@ const GarageView: React.FC = () => {
     );
 
     const teamMembers = orgMembers.filter(m =>
-        (m.role === UserRole.SUPER_MANAGER || m.role === UserRole.DEPUTY_MANAGER || m.role === UserRole.TEAM) &&
+        (m.role === UserRole.SUPER_MANAGER || m.role === UserRole.STAFF) &&
         m.membership_status === MembershipStatus.APPROVED
     );
 
@@ -114,13 +115,12 @@ const GarageView: React.FC = () => {
     const getRoleBadge = (role: UserRole) => {
         switch (role) {
             case UserRole.SUPER_MANAGER:
-            case UserRole.DEPUTY_MANAGER:
                 return (
                     <span className="flex items-center gap-1 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
                         <ShieldCheck size={12} /> מנהל
                     </span>
                 );
-            case UserRole.TEAM:
+            case UserRole.STAFF:
                 return (
                     <span className="flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
                         <Users size={12} /> עובד
@@ -300,7 +300,10 @@ const GarageView: React.FC = () => {
                                             {formatLicensePlate(v.plate)}
                                         </div>
                                         <button
-                                            onClick={() => { if (window.confirm('למחוק רכב זה?')) removeVehicle(v.plate); }}
+                                            onClick={() => {
+                                                removeVehicle(v.plate);
+                                                toast.success('הרכב הוסר בהצלחה');
+                                            }}
                                             className="text-gray-300 hover:text-red-500 transition-colors p-2"
                                         >
                                             <Trash2 size={18} />

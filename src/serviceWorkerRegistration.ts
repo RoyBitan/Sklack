@@ -1,4 +1,4 @@
-import { isMobile } from './utils'; // Assuming this exists, or remove if not needed. We'll use feature detection instead.
+
 
 const isLocalhost = Boolean(
     window.location.hostname === 'localhost' ||

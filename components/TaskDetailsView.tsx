@@ -18,15 +18,27 @@ import {
 } from 'lucide-react';
 import { formatLicensePlate } from '../utils/formatters';
 import EditTaskModal from './EditTaskModal';
+import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const TaskDetailsView: React.FC = () => {
+    const { id: urlTaskId } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const { profile } = useAuth();
-    const { tasks, updateTaskStatus, refreshData } = useData();
-    const { selectedTaskId, setSelectedTaskId, navigateTo } = useApp();
+    const { tasks } = useData();
+    const { setSelectedTaskId, navigateTo } = useApp();
     const [assignedWorkers, setAssignedWorkers] = useState<Profile[]>([]);
     const [showEditModal, setShowEditModal] = useState(false);
 
-    const task = useMemo(() => tasks.find(t => t.id === selectedTaskId), [tasks, selectedTaskId]);
+    // Sync context with URL param
+    useEffect(() => {
+        if (urlTaskId) {
+            setSelectedTaskId(urlTaskId);
+        }
+        return () => setSelectedTaskId(null);
+    }, [urlTaskId, setSelectedTaskId]);
+
+    const task = useMemo(() => tasks.find(t => t.id === urlTaskId), [tasks, urlTaskId]);
 
     useEffect(() => {
         const fetchWorkers = async () => {
@@ -40,6 +52,22 @@ const TaskDetailsView: React.FC = () => {
         };
         if (task) fetchWorkers();
     }, [task?.assigned_to]);
+
+    // IDOR Protection: Customers can ONLY view their own tasks
+    useEffect(() => {
+        if (!task || !profile) return;
+
+        if (profile.role === UserRole.CUSTOMER) {
+            const isOwner = task.customer_id === profile.id ||
+                task.created_by === profile.id ||
+                task.vehicle?.owner_id === profile.id;
+
+            if (!isOwner) {
+                navigate('/tasks');
+                toast.error('אין לך הרשאה לצפות במשימה זו');
+            }
+        }
+    }, [task, profile, navigate]);
 
     if (!task) {
         return (
@@ -92,7 +120,7 @@ const TaskDetailsView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {(profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.DEPUTY_MANAGER) && (
+                    {(profile?.role === UserRole.SUPER_MANAGER || profile?.role === UserRole.STAFF) && (
                         <button
                             onClick={() => setShowEditModal(true)}
                             className="bg-black text-white px-4 py-2 rounded-xl text-sm font-black shadow-lg active:scale-95 transition-all"
@@ -110,8 +138,8 @@ const TaskDetailsView: React.FC = () => {
                     <div className="flex items-center justify-between border-b border-gray-50 pb-4">
                         <div className="text-[11px] font-black text-purple-600 uppercase tracking-widest">סטטוס וביצוע</div>
                         <div className={`px-4 py-1.5 rounded-full text-[11px] font-black ring-1 ring-offset-2 ${task.status === TaskStatus.COMPLETED ? 'bg-green-100 text-green-700 ring-green-500/20' :
-                                task.status === TaskStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700 ring-blue-500/20' :
-                                    'bg-gray-100 text-gray-600 ring-gray-500/20'
+                            task.status === TaskStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700 ring-blue-500/20' :
+                                'bg-gray-100 text-gray-600 ring-gray-500/20'
                             }`}>
                             {task.status}
                         </div>

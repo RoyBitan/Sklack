@@ -1,7 +1,6 @@
 export enum UserRole {
   SUPER_MANAGER = 'SUPER_MANAGER',
-  DEPUTY_MANAGER = 'DEPUTY_MANAGER',
-  TEAM = 'TEAM',
+  STAFF = 'STAFF',
   CUSTOMER = 'CUSTOMER'
 }
 
@@ -57,6 +56,7 @@ export interface Organization {
   id: string;
   name: string;
   logo_url?: string;
+  garage_code: string;
   created_at: string;
   subscription_tier?: string;
   subscription_status?: string;
@@ -80,9 +80,8 @@ export interface Profile {
   };
   avatar_url?: string;
   created_at: string;
-  organization?: {
-    name: string;
-  };
+  organization?: Organization;
+  documents?: Record<string, string>;
 }
 
 export interface Vehicle {
@@ -118,8 +117,10 @@ export interface Task {
   started_at: string | null;
   completed_at: string | null;
   vehicle_year: string | null;
+  customer_id?: string | null;
   immobilizer_code: string | null;
   created_at: string;
+  updated_at?: string;
   metadata: Record<string, any>;
   scheduled_reminder_at?: string | null;
   reminder_sent?: boolean;
@@ -166,7 +167,7 @@ export interface AuditLog {
   created_at: string;
 }
 
-export type AppView = 'DASHBOARD' | 'TASKS' | 'VEHICLES' | 'ORGANIZATION' | 'NOTIFICATIONS' | 'APPOINTMENTS' | 'SETTINGS' | 'TASK_DETAIL' | 'REQUEST_DETAIL';
+export type AppView = 'DASHBOARD' | 'TASKS' | 'VEHICLES' | 'ORGANIZATION' | 'NOTIFICATIONS' | 'APPOINTMENTS' | 'SETTINGS' | 'TASK_DETAIL' | 'REQUEST_DETAIL' | 'GARAGE';
 
 export interface Notification {
   id: string;

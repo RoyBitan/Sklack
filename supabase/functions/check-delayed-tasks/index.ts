@@ -1,10 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders } from '../_shared/cors.ts'
+import { getSupabaseClient } from '../_shared/supabase-client.ts'
 
 /**
  * Check Delayed Tasks
@@ -22,10 +18,7 @@ serve(async (req) => {
     }
 
     try {
-        const supabase = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        )
+        const supabase = getSupabaseClient()
 
         console.log('Running delayed task check...')
 
@@ -57,49 +50,56 @@ serve(async (req) => {
         let alertsSent = 0
 
         for (const task of delayedTasks || []) {
-            // Check if we already sent a delay alert for this task
-            const { data: existingAlert } = await supabase
-                .from('notifications')
-                .select('id')
-                .eq('task_id', task.id)
-                .eq('title', 'שים לב: טיפול מתעכב')
-                .maybeSingle()
-
-            if (existingAlert) {
-                console.log(`Delay alert already sent for task ${task.id}`)
-                continue
-            }
-
-            // Get all admins
-            const { data: admins, error: adminsError } = await supabase
-                .from('profiles')
-                .select('id')
-                .in('role', ['SUPER_MANAGER', 'DEPUTY_MANAGER'])
-
-            if (adminsError) {
-                console.error('Error fetching admins:', adminsError)
-                continue
-            }
-
-            // Send notification to each admin
-            for (const admin of admins || []) {
-                const { error: notifError } = await supabase
+            try {
+                // Check if we already sent a delay alert for this task
+                const { data: existingAlert } = await supabase
                     .from('notifications')
-                    .insert({
-                        user_id: admin.id,
-                        title: 'שים לב: טיפול מתעכב',
-                        body: `שים לב: הטיפול ברכב ${task.vehicles?.plate || 'לא ידוע'} מתעכב. בדוק מול העובד.`,
-                        url: `/#/task/${task.id}`,
-                        task_id: task.id,
-                        urgent: true,
-                    })
+                    .select('id')
+                    .eq('task_id', task.id)
+                    .eq('title', 'שים לב: טיפול מתעכב')
+                    .maybeSingle()
 
-                if (notifError) {
-                    console.error(`Error creating notification for admin ${admin.id}:`, notifError)
-                } else {
-                    alertsSent++
-                    console.log(`Delay alert sent to admin ${admin.id} for task ${task.id}`)
+                if (existingAlert) {
+                    // console.log(`Delay alert already sent for task ${task.id}`) // Verbose
+                    continue
                 }
+
+                // Get all admins
+                const { data: admins, error: adminsError } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('role', 'SUPER_MANAGER')
+
+                if (adminsError) {
+                    console.error('Error fetching admins:', adminsError)
+                    continue
+                }
+
+                // Send notification to each admin
+                const adminPromises = (admins || []).map(async (admin) => {
+                    const { error: notifError } = await supabase
+                        .from('notifications')
+                        .insert({
+                            user_id: admin.id,
+                            title: 'שים לב: טיפול מתעכב',
+                            body: `שים לב: הטיפול ברכב ${task.vehicles?.plate || 'לא ידוע'} מתעכב. בדוק מול העובד.`,
+                            url: `/#/task/${task.id}`,
+                            task_id: task.id,
+                            urgent: true,
+                        })
+
+                    if (notifError) {
+                        console.error(`Error creating notification for admin ${admin.id}:`, notifError)
+                    } else {
+                        alertsSent++
+                    }
+                })
+
+                await Promise.allSettled(adminPromises);
+
+            } catch (innerError) {
+                console.error(`Error processing task ${task.id}:`, innerError)
+                // Continue to next task
             }
         }
 
@@ -118,7 +118,7 @@ serve(async (req) => {
             }
         )
     } catch (error) {
-        console.error('Error in check-delayed-tasks:', error)
+        console.error('CRITICAL Error in check-delayed-tasks:', error)
         return new Response(
             JSON.stringify({ error: error.message }),
             {

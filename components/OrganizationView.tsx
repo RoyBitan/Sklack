@@ -7,6 +7,8 @@ import QRScanner from './QRScanner';
 import { QRCodeSVG } from 'qrcode.react';
 import { normalizePhone } from '../utils/phoneUtils';
 import { sanitize } from '../utils/formatters';
+import { toast } from 'sonner';
+
 
 interface OrganizationViewProps {
     onboarding?: boolean;
@@ -86,7 +88,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
             fetchMembers();
         } catch (e) {
             console.error(e);
-            alert('הפעולה נכשלה');
+            toast.error('הפעולה נכשלה');
         }
     };
 
@@ -105,7 +107,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
             setInfoMessage('הזמנה נשלחה בהצלחה!');
             setTimeout(() => setInfoMessage(''), 3000);
         } catch (err: any) {
-            alert(err.message || 'שגיאה בשליחת הזמנה');
+            toast.error(err.message || 'שגיאה בשליחת הזמנה');
         } finally {
             setLoading(false);
         }
@@ -120,7 +122,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
             await refreshProfile();
             window.location.reload();
         } catch (err: any) {
-            alert(err.message || 'שגיאה בקבלת ההזמנה');
+            toast.error(err.message || 'שגיאה בקבלת ההזמנה');
         } finally {
             setLoading(false);
         }
@@ -166,7 +168,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
             const { data } = await supabase.rpc('get_org_by_manager_phone', { manager_phone: normalized });
             if (data && data.length > 0) {
                 setOrgIdToJoin(sanitize(data[0].garage_code).toUpperCase());
-                setInfoMessage(`נמצא מוסך: ${data[0].org_name}`);
+                setInfoMessage(`נמצא מוסך: ${data[0].org_name} `);
             } else {
                 setError('לא נמצא מוסך עבור מספר זה');
             }
@@ -419,7 +421,7 @@ const OrganizationView: React.FC<OrganizationViewProps> = ({ onboarding }) => {
 
     const orgDisplayName = profile?.membership_status === MembershipStatus.PENDING
         ? 'בהמתנה לאישור'
-        : (isManager ? `המוסך של ${profile?.full_name?.split?.(' ')?.[0] || 'המנהל'}` : 'חבר בארגון');
+        : (isManager ? `המוסך של ${profile?.full_name?.split?.(' ')?.[0] || 'המנהל'} ` : 'חבר בארגון');
 
     return (
         <div className="max-w-6xl mx-auto space-y-16 py-12 px-8 animate-fade-in-up">

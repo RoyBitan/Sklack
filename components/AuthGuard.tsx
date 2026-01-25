@@ -1,26 +1,15 @@
 import React from 'react';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useApp } from '../contexts/AppContext';
 import Auth from './Auth';
 import Layout from './Layout';
 import OrganizationView from './OrganizationView';
 import PendingApprovalView from './PendingApprovalView';
-import ManagerDashboard from './ManagerDashboard';
-import TeamDashboard from './TeamDashboard';
-import CustomerDashboard from './CustomerDashboard';
-import SettingsView from './SettingsView';
-import VehiclesView from './VehiclesView';
-import NotificationsView from './NotificationsView';
-import AppointmentsView from './AppointmentsView';
-import GarageView from './GarageView';
 import LoadingSpinner from './LoadingSpinner';
-import TaskDetailsView from './TaskDetailsView';
-import RequestDetailsView from './RequestDetailsView';
-import { UserRole, MembershipStatus } from '../types';
+import { MembershipStatus } from '../types';
 
 export const AuthGuard: React.FC = () => {
     const { user, profile, loading: authLoading } = useAuth();
-    const { activeView } = useApp();
 
     if (authLoading) {
         return <LoadingSpinner message="מאמת פרטי משתמש..." />;
@@ -48,33 +37,7 @@ export const AuthGuard: React.FC = () => {
         );
     }
 
-    // View Routing
-    const renderView = () => {
-        switch (activeView) {
-            case 'SETTINGS': return <SettingsView />;
-            case 'ORGANIZATION': return <OrganizationView />;
-            case 'NOTIFICATIONS': return <NotificationsView />;
-            case 'APPOINTMENTS': return <AppointmentsView />;
-            case 'VEHICLES': return <VehiclesView />;
-            case 'GARAGE': return <GarageView />;
-            case 'TASK_DETAIL': return <TaskDetailsView />;
-            case 'REQUEST_DETAIL': return <RequestDetailsView />;
-            case 'DASHBOARD':
-            default:
-                if (profile.role === UserRole.SUPER_MANAGER || profile.role === UserRole.DEPUTY_MANAGER) {
-                    return <ManagerDashboard />;
-                }
-                if (profile.role === UserRole.TEAM) {
-                    return <TeamDashboard />;
-                }
-                return <CustomerDashboard />;
-        }
-    };
-
-    // If it's a detail view, render without Layout to avoid scrolling overlaps
-    if (activeView === 'TASK_DETAIL' || activeView === 'REQUEST_DETAIL') {
-        return renderView();
-    }
-
-    return <Layout>{renderView()}</Layout>;
+    // Render the matching child route from App.tsx
+    return <Outlet />;
 };
+
