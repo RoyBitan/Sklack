@@ -262,36 +262,67 @@ const CustomerDashboard: React.FC = () => {
   const handleDocUpload = async (type: string, file: File) => {
     if (!user?.id) return;
 
+    // Debugging info for physical device remote debugging
+    console.log(`[DocUpload] Starting upload for ${type}:`, {
+      name: file.name,
+      type: file.type,
+      size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+    });
+
+    if (file.size === 0) {
+      toast.error("הקובץ ריק או שאינו זמין");
+      return;
+    }
+
     try {
       setUploadingDoc(type);
       setUploadProgress((prev) => ({ ...prev, [type]: 0 }));
 
-      // Simulate progress while compressing/starting
+      // Manage simulation while processing starts
+      const startTime = Date.now();
       const interval = setInterval(() => {
         setUploadProgress((prev) => {
           const curr = prev[type] || 0;
-          if (curr >= 90) return prev;
-          return { ...prev, [type]: curr + 10 };
+          if (curr >= 80) return prev; // Limit simulation to 80%
+          return { ...prev, [type]: curr + 5 };
         });
-      }, 200);
+      }, 100);
 
       // 1. Prepare File
       let fileToUpload: File | Blob = file;
-      const fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const fileExt = file.name
+        ? file.name.split(".").pop()?.toLowerCase() || "jpg"
+        : "jpg";
 
+      // If it's an image, process it (on mobile, this is often where it fails if memory isn't handled)
       if (file.type.startsWith("image/")) {
-        fileToUpload = await compressImage(file, 1200, 1200, 0.7);
+        console.log("[DocUpload] Compressing image...");
+        try {
+          fileToUpload = await compressImage(file, 1600, 1600, 0.75);
+          console.log("[DocUpload] Compression successful", {
+            size: `${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`,
+          });
+        } catch (compressErr) {
+          console.error(
+            "[DocUpload] Compression failed, using original:",
+            compressErr,
+          );
+          // Fallback to original if compression fails
+        }
       }
 
       const filePath = `${user.id}/${type}-${Date.now()}.${fileExt}`;
 
       // 2. Upload to Storage
+      console.log("[DocUpload] Initializing storage upload...");
       const publicUrl = await uploadAsset(fileToUpload, "documents", filePath);
+      console.log("[DocUpload] Storage upload successful:", publicUrl);
 
       clearInterval(interval);
       setUploadProgress((prev) => ({ ...prev, [type]: 100 }));
 
       // 3. Update Database direct - Fetch latest to avoid overwriting other slots
+      console.log("[DocUpload] Updating database record...");
       const { data: fetchResult, error: fetchError } = await supabase
         .from("profiles")
         .select("documents")
@@ -300,12 +331,11 @@ const CustomerDashboard: React.FC = () => {
 
       if (fetchError) {
         console.warn(
-          "Could not fetch latest docs, falling back to local state",
+          "[DocUpload] Profile fetch failed, using state:",
           fetchError,
         );
       }
 
-      // Use freshly fetched docs, or fallback to profile docs, or empty object
       const latestDocs = fetchResult?.documents || profile?.documents || {};
       const updatedDocs = { ...latestDocs, [type]: publicUrl };
 
@@ -314,14 +344,17 @@ const CustomerDashboard: React.FC = () => {
         .update({ documents: updatedDocs })
         .eq("id", user.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("[DocUpload] Database update failed:", updateError);
+        throw updateError;
+      }
 
       // 4. Success & Refresh
       toast.success("המסמך הועלה בהצלחה");
       if (refreshProfile) await refreshProfile();
-    } catch (error) {
-      console.error("Doc upload failed:", error);
-      toast.error("שגיאה בהעלאת המסמך");
+    } catch (error: any) {
+      console.error("[DocUpload] CRITICAL FAILURE:", error);
+      toast.error(`שגיאה בהעלאת המסמך: ${error.message || "שגיאה לא ידועה"}`);
     } finally {
       setUploadingDoc(null);
       setTimeout(() => {
@@ -330,7 +363,7 @@ const CustomerDashboard: React.FC = () => {
           delete next[type];
           return next;
         });
-      }, 1000);
+      }, 1500);
     }
   };
 

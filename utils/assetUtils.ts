@@ -15,65 +15,77 @@ export const compressImage = async (
   quality: number = 0.7,
 ): Promise<Blob> => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
 
-        if (width > height) {
-          if (width > maxWidth) {
-            height *= maxWidth / width;
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width *= maxHeight / height;
-            height = maxHeight;
-          }
+    img.src = objectUrl;
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const canvas = document.createElement("canvas");
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
         }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
 
-        canvas.width = width;
-        canvas.height = height;
+      canvas.width = width;
+      canvas.height = height;
 
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0, width, height);
 
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error("Canvas toBlob failed"));
-            }
-          },
-          "image/jpeg",
-          quality,
-        );
-      };
-      img.onerror = (err) => reject(err);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Canvas toBlob failed"));
+          }
+        },
+        file.type || "image/jpeg",
+        quality,
+      );
     };
-    reader.onerror = (err) => reject(err);
+
+    img.onerror = (err) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(err);
+    };
   });
 };
 
 /**
- * Uploads a file to Supabase Storage with automatic path generation.
+ * Uploads a file to Supabase Storage with automatic path generation and progress support.
  */
 export const uploadAsset = async (
   file: File | Blob,
   bucket: "avatars" | "documents" | "tasks",
   fileName: string,
+  onProgress?: (percent: number) => void,
 ): Promise<string> => {
+  // Determine content type accurately
+  let contentType = "application/octet-stream";
+  if (file instanceof File) {
+    contentType = file.type;
+  } else if (file instanceof Blob) {
+    contentType = file.type;
+  }
+
   const { data, error } = await supabase.storage
     .from(bucket)
     .upload(fileName, file, {
       upsert: true,
-      contentType: file instanceof File ? file.type : "image/jpeg",
+      contentType: contentType || "image/jpeg",
     });
 
   if (error) throw error;
