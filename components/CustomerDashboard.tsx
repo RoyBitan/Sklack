@@ -291,15 +291,23 @@ const CustomerDashboard: React.FC = () => {
       clearInterval(interval);
       setUploadProgress((prev) => ({ ...prev, [type]: 100 }));
 
-      // 3. Update Database direct
-      const { data: currProfile } = await supabase
+      // 3. Update Database direct - Fetch latest to avoid overwriting other slots
+      const { data: fetchResult, error: fetchError } = await supabase
         .from("profiles")
         .select("documents")
         .eq("id", user.id)
         .single();
 
-      const currentDocs = currProfile?.documents || {};
-      const updatedDocs = { ...currentDocs, [type]: publicUrl };
+      if (fetchError) {
+        console.warn(
+          "Could not fetch latest docs, falling back to local state",
+          fetchError,
+        );
+      }
+
+      // Use freshly fetched docs, or fallback to profile docs, or empty object
+      const latestDocs = fetchResult?.documents || profile?.documents || {};
+      const updatedDocs = { ...latestDocs, [type]: publicUrl };
 
       const { error: updateError } = await supabase
         .from("profiles")
@@ -332,15 +340,22 @@ const CustomerDashboard: React.FC = () => {
     try {
       setIsSubmitting(true);
 
-      // 1. Get current docs
-      const { data: currProfile } = await supabase
+      // 1. Get current docs - Fetch latest to avoid overwriting other slots
+      const { data: fetchResult, error: fetchError } = await supabase
         .from("profiles")
         .select("documents")
         .eq("id", user.id)
         .single();
 
-      const currentDocs = currProfile?.documents || {};
-      const docUrl = currentDocs[type];
+      if (fetchError) {
+        console.warn(
+          "Could not fetch latest docs for delete, falling back to local state",
+          fetchError,
+        );
+      }
+
+      const latestDocs = fetchResult?.documents || profile?.documents || {};
+      const docUrl = latestDocs[type];
 
       // 2. Permanent Deletion from Cloud Storage
       if (docUrl) {
@@ -348,7 +363,7 @@ const CustomerDashboard: React.FC = () => {
       }
 
       // 3. Update Database
-      const updatedDocs = { ...currentDocs };
+      const updatedDocs = { ...latestDocs };
       delete updatedDocs[type]; // Completely remove the key
 
       const { error } = await supabase
@@ -1434,7 +1449,7 @@ const CustomerDashboard: React.FC = () => {
                         <input
                           type="file"
                           className="hidden"
-                          accept="image/*,application/pdf"
+                          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
                           disabled={isUploading}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
