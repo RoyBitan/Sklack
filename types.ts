@@ -1,55 +1,55 @@
 export enum UserRole {
-  SUPER_MANAGER = 'SUPER_MANAGER',
-  STAFF = 'STAFF',
-  CUSTOMER = 'CUSTOMER'
+  SUPER_MANAGER = "SUPER_MANAGER",
+  STAFF = "STAFF",
+  CUSTOMER = "CUSTOMER",
 }
 
 export enum MembershipStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED'
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
 }
 
 export enum Language {
-  HEBREW = 'he',
-  ENGLISH = 'en',
-  ARABIC = 'ar',
-  RUSSIAN = 'ru',
-  CHINESE = 'zh',
-  THAI = 'th',
-  HINDI = 'hi'
+  HEBREW = "he",
+  ENGLISH = "en",
+  ARABIC = "ar",
+  RUSSIAN = "ru",
+  CHINESE = "zh",
+  THAI = "th",
+  HINDI = "hi",
 }
 
 export enum TaskStatus {
-  WAITING = 'WAITING',
-  APPROVED = 'APPROVED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CUSTOMER_APPROVAL = 'CUSTOMER_APPROVAL',
-  CANCELLED = 'CANCELLED',
-  PAUSED = 'PAUSED',
-  WAITING_FOR_APPROVAL = 'WAITING_FOR_APPROVAL',
-  SCHEDULED = 'SCHEDULED'
+  WAITING = "WAITING",
+  APPROVED = "APPROVED",
+  IN_PROGRESS = "IN_PROGRESS",
+  COMPLETED = "COMPLETED",
+  CUSTOMER_APPROVAL = "CUSTOMER_APPROVAL",
+  CANCELLED = "CANCELLED",
+  PAUSED = "PAUSED",
+  WAITING_FOR_APPROVAL = "WAITING_FOR_APPROVAL",
+  SCHEDULED = "SCHEDULED",
 }
 
 export enum Priority {
-  NORMAL = 'NORMAL',
-  URGENT = 'URGENT',
-  CRITICAL = 'CRITICAL'
+  NORMAL = "NORMAL",
+  URGENT = "URGENT",
+  CRITICAL = "CRITICAL",
 }
 
 export enum ProposalStatus {
-  PENDING_MANAGER = 'PENDING_MANAGER',
-  PENDING_CUSTOMER = 'PENDING_CUSTOMER',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED'
+  PENDING_MANAGER = "PENDING_MANAGER",
+  PENDING_CUSTOMER = "PENDING_CUSTOMER",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
 }
 
 export enum AppointmentStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-  CANCELLED = 'CANCELLED'
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
+  CANCELLED = "CANCELLED",
 }
 
 export interface Organization {
@@ -70,7 +70,6 @@ export interface Profile {
   phone: string | null;
   secondary_phone?: string | null;
   address?: string | null;
-  national_id?: string | null;
   role: UserRole;
   membership_status: MembershipStatus;
   notification_settings?: {
@@ -148,12 +147,19 @@ export interface Appointment {
   id: string;
   org_id: string;
   customer_id: string | null;
+  customer_name?: string;
+  vehicle_plate?: string;
   service_type: string;
   description: string | null;
   appointment_date: string;
   appointment_time: string;
+  duration?: string;
   status: AppointmentStatus;
   created_at: string;
+
+  // Virtual joins
+  customer?: Profile;
+  vehicle?: Vehicle;
 }
 
 export interface AuditLog {
@@ -167,7 +173,17 @@ export interface AuditLog {
   created_at: string;
 }
 
-export type AppView = 'DASHBOARD' | 'TASKS' | 'VEHICLES' | 'ORGANIZATION' | 'NOTIFICATIONS' | 'APPOINTMENTS' | 'SETTINGS' | 'TASK_DETAIL' | 'REQUEST_DETAIL' | 'GARAGE';
+export type AppView =
+  | "DASHBOARD"
+  | "TASKS"
+  | "VEHICLES"
+  | "ORGANIZATION"
+  | "NOTIFICATIONS"
+  | "APPOINTMENTS"
+  | "SETTINGS"
+  | "TASK_DETAIL"
+  | "REQUEST_DETAIL"
+  | "GARAGE";
 
 export interface Notification {
   id: string;
@@ -199,7 +215,7 @@ export interface PreCheckInData {
   currentMileage?: string;
   serviceTypes?: string[]; // e.g. ['Annual Service', 'Test']
   faultDescription: string;
-  paymentMethod?: 'CREDIT_CARD' | 'CASH' | 'OTHER';
+  paymentMethod?: "CREDIT_CARD" | "CASH" | "OTHER";
 
   // Appointment Request
   appointmentDate?: string;
