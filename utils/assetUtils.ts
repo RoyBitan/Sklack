@@ -86,6 +86,13 @@ export const uploadAsset = async (
     .upload(fileName, file, {
       upsert: true,
       contentType: contentType || "image/jpeg",
+      // Real-time progress tracking for Android & iOS compatibility
+      onUploadProgress: (progress) => {
+        if (onProgress && progress.total) {
+          const percent = Math.round((progress.loaded / progress.total) * 100);
+          onProgress(percent);
+        }
+      },
     });
 
   if (error) throw error;

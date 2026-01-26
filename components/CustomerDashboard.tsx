@@ -278,21 +278,20 @@ const CustomerDashboard: React.FC = () => {
       setUploadingDoc(type);
       setUploadProgress((prev) => ({ ...prev, [type]: 0 }));
 
-      // Manage simulation while processing starts
-      const startTime = Date.now();
-      const interval = setInterval(() => {
-        setUploadProgress((prev) => {
-          const curr = prev[type] || 0;
-          if (curr >= 80) return prev; // Limit simulation to 80%
-          return { ...prev, [type]: curr + 5 };
-        });
-      }, 100);
-
       // 1. Prepare File
       let fileToUpload: File | Blob = file;
       const fileExt = file.name
         ? file.name.split(".").pop()?.toLowerCase() || "jpg"
         : "jpg";
+
+      // If a file already exists in this slot, delete it from storage first (Hard Delete)
+      const oldDocUrl = profile?.documents?.[type];
+      if (oldDocUrl) {
+        console.log(
+          `[DocUpload] Found existing file for ${type}, purging from storage...`,
+        );
+        await deleteAsset("documents", oldDocUrl);
+      }
 
       // If it's an image, process it (on mobile, this is often where it fails if memory isn't handled)
       if (file.type.startsWith("image/")) {
@@ -315,11 +314,15 @@ const CustomerDashboard: React.FC = () => {
 
       // 2. Upload to Storage
       console.log("[DocUpload] Initializing storage upload...");
-      const publicUrl = await uploadAsset(fileToUpload, "documents", filePath);
+      const publicUrl = await uploadAsset(
+        fileToUpload,
+        "documents",
+        filePath,
+        (percent) => {
+          setUploadProgress((prev) => ({ ...prev, [type]: percent }));
+        },
+      );
       console.log("[DocUpload] Storage upload successful:", publicUrl);
-
-      clearInterval(interval);
-      setUploadProgress((prev) => ({ ...prev, [type]: 100 }));
 
       // 3. Update Database direct - Fetch latest to avoid overwriting other slots
       console.log("[DocUpload] Updating database record...");
@@ -453,7 +456,27 @@ const CustomerDashboard: React.FC = () => {
         .maybeSingle();
 
       if (existingVehicle) {
-        toast.error("הרכב כבר קיים במערכת");
+        // Update existing vehicle
+        const { error: updateError } = await supabase
+          .from("vehicles")
+          .update({
+            model: sanitize(newVehicle.model),
+            year: sanitize(newVehicle.year),
+            color: sanitize(newVehicle.color),
+            vin: sanitize(newVehicle.vin),
+            fuel_type: sanitize(newVehicle.fuel_type),
+            engine_model: sanitize(newVehicle.engine_model),
+            registration_valid_until: formatForDb(
+              newVehicle.registration_valid_until,
+            ),
+            kodanit: sanitize(newVehicle.kodanit),
+            owner_name: sanitize(user?.full_name),
+          })
+          .eq("id", existingVehicle.id);
+
+        if (updateError) throw updateError;
+        await refreshData();
+        setShowAddVehicle(false);
         return;
       }
 
@@ -1004,7 +1027,7 @@ const CustomerDashboard: React.FC = () => {
                     <div className="relative">
                       <input
                         required
-                        className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pl-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all"
+                        className="w-full h-14 bg-gray-50 border-2 border-transparent rounded-2xl p-5 pr-12 text-sm font-bold focus:bg-white focus:border-blue-600 outline-none transition-all text-left ltr"
                         placeholder="טלפון"
                         value={checkInForm.ownerPhone}
                         onChange={(e) =>
@@ -1014,7 +1037,7 @@ const CustomerDashboard: React.FC = () => {
                           })}
                       />
                       <Phone
-                        className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
                         size={20}
                       />
                     </div>
