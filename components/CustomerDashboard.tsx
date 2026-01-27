@@ -62,6 +62,8 @@ import {
 import { isValidPhone, normalizePhone } from "../utils/phoneUtils";
 import LoadingSpinner from "./LoadingSpinner";
 import { toast } from "sonner";
+import { playClickSound, scrollToTop } from "../utils/uiUtils";
+import { formatPhoneDisplay } from "../utils/phoneUtils";
 
 import VehicleCard from "./VehicleCard";
 import CustomerTaskCard from "./CustomerTaskCard";
@@ -107,6 +109,7 @@ const CustomerDashboard: React.FC = () => {
   const [showVehicleSelect, setShowVehicleSelect] = useState(false);
   const [garagePhone, setGaragePhone] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
 
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({
     plate: "",
@@ -179,8 +182,17 @@ const CustomerDashboard: React.FC = () => {
         vehicleYear: showCheckIn.year || "",
         vehicleColor: showCheckIn.color || "",
       });
+
+      // Scroll to top of modal on open
+      setTimeout(() => scrollToTop(), 100);
     }
   }, [showCheckIn, user, authUser, editingTaskId]);
+
+  React.useEffect(() => {
+    if (showAddVehicle) {
+      setTimeout(() => scrollToTop(), 100);
+    }
+  }, [showAddVehicle]);
 
   if (loading || !user) {
     return <LoadingSpinner message="טוען לוח בקרה..." />;
@@ -190,6 +202,11 @@ const CustomerDashboard: React.FC = () => {
   const myTasks = tasks;
   // Use vehicles from DataContext which is refreshed after addVehicle
   const myVehicles = vehicles;
+
+  const activeTasks = myTasks.filter((t) => t.status !== TaskStatus.COMPLETED);
+  const completedTasks = myTasks.filter((t) =>
+    t.status === TaskStatus.COMPLETED
+  );
 
   const handleDisconnect = async () => {
     if (
@@ -1310,6 +1327,7 @@ const CustomerDashboard: React.FC = () => {
                 type="submit"
                 form="check-in-form"
                 disabled={isSubmitting}
+                onClick={() => !isSubmitting && playClickSound()}
                 className={`w-full h-16 sm:h-20 ${
                   isSubmitting
                     ? "bg-blue-400 cursor-not-allowed"
@@ -1334,15 +1352,41 @@ const CustomerDashboard: React.FC = () => {
 
       {/* Tasks Section */}
       <section className="space-y-6">
-        <h3 className="font-black text-2xl text-gray-900 px-4 tracking-tight text-start flex items-center gap-3">
-          <CheckCircle2 size={26} className="text-blue-600" />
-          הטיפולים שלי
-        </h3>
-        {myTasks.length > 0
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4">
+          <h3 className="font-black text-2xl text-gray-900 tracking-tight text-start flex items-center gap-3">
+            <CheckCircle2 size={26} className="text-blue-600" />
+            {activeTab === "ACTIVE" ? "הטיפולים שלי" : "היסטוריית טיפולים"}
+          </h3>
+          <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner">
+            <button
+              onClick={() => setActiveTab("ACTIVE")}
+              className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTab === "ACTIVE"
+                  ? "bg-white text-black shadow-md scale-105"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              טיפולים פעילים ({activeTasks.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("HISTORY")}
+              className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTab === "HISTORY"
+                  ? "bg-white text-black shadow-md scale-105"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              היסטוריה ({completedTasks.length})
+            </button>
+          </div>
+        </div>
+        {(activeTab === "ACTIVE" ? activeTasks : completedTasks).length > 0
           ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {myTasks.map((task) => (
+                {(activeTab === "ACTIVE" ? activeTasks : completedTasks).map((
+                  task,
+                ) => (
                   <CustomerTaskCard
                     key={task.id}
                     task={task}

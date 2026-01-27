@@ -42,7 +42,10 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(cache => {
             return cache.match(event.request).then(response => {
                 const fetchPromise = fetch(event.request).then(networkResponse => {
-                    cache.put(event.request, networkResponse.clone());
+                    // Only cache successful 200 responses (avoids 206 Partial Content error)
+                    if (networkResponse && networkResponse.status === 200) {
+                        cache.put(event.request, networkResponse.clone());
+                    }
                     return networkResponse;
                 }).catch(() => {
                     // Fallback to cache if network fails

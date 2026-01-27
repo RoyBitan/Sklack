@@ -23,6 +23,7 @@ import CreateTaskModal from "./CreateTaskModal";
 import InviteMemberModal from "./InviteMemberModal";
 import EditTaskModal from "./EditTaskModal";
 import LoadingSpinner from "./LoadingSpinner";
+import UpgradeBanner from "./UpgradeBanner";
 
 const ManagerDashboard: React.FC = () => {
   const { profile } = useAuth();
@@ -59,7 +60,8 @@ const ManagerDashboard: React.FC = () => {
         matchesStatus = isCompleted;
       } else if (statusFilter === "ALL") {
         matchesStatus = t.status !== TaskStatus.WAITING_FOR_APPROVAL &&
-          t.status !== TaskStatus.SCHEDULED;
+          t.status !== TaskStatus.SCHEDULED &&
+          t.status !== TaskStatus.COMPLETED;
       } else {
         matchesStatus = t.status === statusFilter;
       }
@@ -115,11 +117,10 @@ const ManagerDashboard: React.FC = () => {
         (t.status === TaskStatus.WAITING || t.status === TaskStatus.APPROVED) &&
         (!t.assigned_to || t.assigned_to.length === 0)
       ).length,
-    inProgress:
-      tasks.filter((t) =>
-        t.status === TaskStatus.IN_PROGRESS ||
-        (t.assigned_to && t.assigned_to.length > 0)
-      ).length,
+    inProgress: tasks.filter((t) =>
+      t.status === TaskStatus.IN_PROGRESS ||
+      (t.assigned_to && t.assigned_to.length > 0)
+    ).length,
     completed: tasks.filter((t) => t.status === TaskStatus.COMPLETED).length,
   };
 
@@ -248,6 +249,8 @@ const ManagerDashboard: React.FC = () => {
           </div>
         </button>
       </div>
+
+      <UpgradeBanner />
 
       {/* Controls */}
       <div className="flex flex-col xl:flex-row gap-4 md:gap-6 items-center sticky top-16 md:top-28 z-40 bg-[#f8f9fa]/80 backdrop-blur-xl py-4 -my-4">
@@ -422,12 +425,10 @@ const ManagerDashboard: React.FC = () => {
                                   </button>
                                   <button
                                     onClick={async () => {
-                                      const date =
-                                        (task.metadata as any)
-                                          ?.appointmentDate || "";
-                                      const time =
-                                        (task.metadata as any)
-                                          ?.appointmentTime || "";
+                                      const date = (task.metadata as any)
+                                        ?.appointmentDate || "";
+                                      const time = (task.metadata as any)
+                                        ?.appointmentTime || "";
                                       const response = prompt(
                                         "הזמן מועד חדש (YYYY-MM-DD HH:mm):",
                                         `${date} ${time}`,

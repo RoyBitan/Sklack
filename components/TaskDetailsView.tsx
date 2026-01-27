@@ -7,11 +7,15 @@ import { Profile, Task, TaskStatus, UserRole } from "../types";
 import {
   AlertCircle,
   ArrowRight,
+  Check,
   ChevronRight,
   ClipboardList,
   Clock,
+  DollarSign,
   MessageCircle,
   Phone,
+  Send,
+  Sparkles,
   User as UserIcon,
   Wrench,
   X,
@@ -29,6 +33,11 @@ const TaskDetailsView: React.FC = () => {
   const { setSelectedTaskId, navigateTo } = useApp();
   const [assignedWorkers, setAssignedWorkers] = useState<Profile[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPriceProposalId, setEditingPriceProposalId] = useState<
+    string | null
+  >(null);
+  const [priceInput, setPriceInput] = useState("");
+  const { updateProposal } = useData();
 
   // Sync context with URL param
   useEffect(() => {
@@ -283,6 +292,149 @@ const TaskDetailsView: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Section: Proposals */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <div className="text-[11px] font-black text-amber-600 uppercase tracking-[0.15em] text-start">
+              הצעות לתיקונים נוספים (Upsells)
+            </div>
+            {task.proposals && task.proposals.length > 0 && (
+              <div className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-black">
+                {task.proposals.length} הצעות
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {task.proposals && task.proposals.length > 0
+              ? (
+                task.proposals.map((proposal) => (
+                  <div
+                    key={proposal.id}
+                    className={`bg-white p-5 rounded-[1.5rem] shadow-sm border-2 transition-all ${
+                      proposal.status === "PENDING_MANAGER"
+                        ? "border-amber-200 bg-amber-50/20"
+                        : proposal.status === "PENDING_CUSTOMER"
+                        ? "border-blue-200"
+                        : proposal.status === "APPROVED"
+                        ? "border-green-200"
+                        : "border-gray-100"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="text-xs font-bold text-gray-700 text-start flex-1">
+                        {proposal.description}
+                      </div>
+                      <div
+                        className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter mr-2 ${
+                          proposal.status === "PENDING_MANAGER"
+                            ? "bg-amber-500 text-white"
+                            : proposal.status === "PENDING_CUSTOMER"
+                            ? "bg-blue-500 text-white"
+                            : proposal.status === "APPROVED"
+                            ? "bg-green-500 text-white"
+                            : "bg-gray-200 text-gray-500"
+                        }`}
+                      >
+                        {proposal.status}
+                      </div>
+                    </div>
+
+                    {proposal.price
+                      ? (
+                        <div className="bg-gray-900 text-white p-3 rounded-xl flex items-center justify-between mb-3">
+                          <span className="text-[10px] font-black opacity-60">
+                            מחיר להצעה:
+                          </span>
+                          <span className="text-lg font-black font-mono">
+                            ₪{proposal.price}
+                          </span>
+                        </div>
+                      )
+                      : proposal.status === "PENDING_MANAGER" &&
+                          profile?.role === UserRole.SUPER_MANAGER
+                      ? (
+                        <div className="flex gap-2 mb-3">
+                          <input
+                            type="number"
+                            placeholder="הוסף מחיר..."
+                            className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold"
+                            value={editingPriceProposalId === proposal.id
+                              ? priceInput
+                              : ""}
+                            onChange={(e) => {
+                              setEditingPriceProposalId(proposal.id);
+                              setPriceInput(e.target.value);
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              if (!priceInput) {
+                                return toast.error("אנא הזן מחיר");
+                              }
+                              updateProposal(task.id, proposal.id, {
+                                price: parseFloat(priceInput),
+                                status: "PENDING_CUSTOMER",
+                              });
+                              setEditingPriceProposalId(null);
+                              setPriceInput("");
+                            }}
+                            className="bg-black text-white px-4 py-2 rounded-lg text-xs font-black flex items-center gap-2"
+                          >
+                            <Send size={14} /> שלח ללקוח
+                          </button>
+                        </div>
+                      )
+                      : (
+                        <div className="text-[10px] font-bold text-gray-400 italic mb-3">
+                          {proposal.status === "PENDING_MANAGER"
+                            ? "ממתין לתמחור מנהל"
+                            : "אין מחיר מוגדר"}
+                        </div>
+                      )}
+
+                    <div className="flex items-center gap-3">
+                      {proposal.photo_url && (
+                        <a
+                          href={proposal.photo_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-black text-blue-600 flex items-center gap-1 hover:underline"
+                        >
+                          <div className="w-6 h-6 bg-blue-50 rounded flex items-center justify-center">
+                            <Check size={12} />
+                          </div>
+                          צפה בתמונה
+                        </a>
+                      )}
+                      {proposal.audio_url && (
+                        <a
+                          href={proposal.audio_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-black text-purple-600 flex items-center gap-1 hover:underline"
+                        >
+                          <div className="w-6 h-6 bg-purple-50 rounded flex items-center justify-center">
+                            <Check size={12} />
+                          </div>
+                          הודעה קולית
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )
+              : (
+                <div className="text-center py-8 bg-gray-50 rounded-[1.5rem] border border-dashed border-gray-200">
+                  <Sparkles className="mx-auto text-gray-300 mb-2" size={24} />
+                  <div className="text-xs font-bold text-gray-400">
+                    אין הצעות לתיקונים נוספים למשימה זו
+                  </div>
+                </div>
+              )}
           </div>
         </div>
 

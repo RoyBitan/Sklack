@@ -1,10 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase credentials missing. App will not function correctly without real environment variables.');
+  console.error("❌ Supabase credentials missing! Check your .env.local file.");
+  if (typeof window !== "undefined") {
+    console.info("Current environment:", import.meta.env);
+  }
 }
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Export a dummy client if missing, or throw a more helpful error
+export const supabase = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createClient("https://MISSING_URL.supabase.co", "placeholder");

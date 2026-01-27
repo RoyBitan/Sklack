@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useSubscription } from "../hooks/useSubscription";
+import { Crown, Zap } from "lucide-react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Car, Check, Save, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -15,10 +17,15 @@ import {
   fetchVehicleDataFromGov,
   isValidIsraeliPlate,
 } from "../utils/vehicleApi";
-import { isValidPhone, normalizePhone } from "../utils/phoneUtils";
+import {
+  formatPhoneNumberInput,
+  isValidPhone,
+  normalizePhone,
+} from "../utils/phoneUtils";
 import {
   ChevronDown,
   Database,
+  DollarSign,
   Download,
   Loader,
   RefreshCcw,
@@ -34,6 +41,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
   const [foundCustomer, setFoundCustomer] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { canAddMoreTasks, activeTasksCount } = useSubscription();
 
   // Form fields
   const [title, setTitle] = useState("");
@@ -61,6 +69,10 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
   const [assignedTo, setAssignedTo] = useState<string[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [showAssignment, setShowAssignment] = useState(false);
+  const [price, setPrice] = useState("");
+  const [showPrice, setShowPrice] = useState(false);
+  const [dueIn, setDueIn] = useState("2h"); // Default 2h
+  const [customMinutes, setCustomMinutes] = useState("");
   const { fetchTeamMembers, notifyMultiple } = useData();
 
   React.useEffect(() => {
@@ -68,6 +80,10 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
       fetchTeamMembers().then(setTeamMembers);
     }
   }, [showAssignment, fetchTeamMembers]);
+
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   React.useEffect(() => {
     const normalized = normalizePhone(phone);
@@ -320,6 +336,18 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
           vehicle_year: sanitize(year),
           immobilizer_code: sanitize(immobilizer),
           assigned_to: assignedTo,
+          price: showPrice ? parseFloat(price) : null,
+          allotted_time: dueIn === "30m"
+            ? 30
+            : dueIn === "1h"
+            ? 60
+            : dueIn === "2h"
+            ? 120
+            : dueIn === "4h"
+            ? 240
+            : dueIn === "custom"
+            ? (parseInt(customMinutes) || 0)
+            : 0,
           metadata: {
             ...(foundCustomer
               ? {
@@ -331,6 +359,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                 ownerName: sanitize(customerName),
               }),
             type: "MANUAL_ENTRY",
+            dueIn: dueIn, // Store the raw selector value
           },
         })
         .select()
@@ -382,7 +411,39 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in-up">
-      <div className="bg-white w-full h-full sm:h-auto sm:w-full sm:max-w-2xl sm:rounded-[2rem] shadow-2xl flex flex-col transition-all duration-300">
+      <div className="bg-white w-full h-full sm:h-auto sm:w-full sm:max-w-2xl sm:rounded-[2rem] shadow-2xl flex flex-col transition-all duration-300 relative overflow-hidden">
+        {/* Subscription Gating Overlay */}
+        {!canAddMoreTasks && (
+          <div className="absolute inset-0 z-[500] bg-white/95 backdrop-blur-md flex items-center justify-center p-8 animate-fade-in text-center">
+            <div className="max-w-md">
+              <div className="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 animate-bounce">
+                <Crown size={40} />
+              </div>
+              <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tighter">
+                הגעת למגבלת המשימות! 🚀
+              </h2>
+              <p className="text-gray-500 font-bold mb-10 leading-relaxed text-lg">
+                המסלול החינמי מאפשר עד 5 משימות פעילות בו-זמנית. כרגע יש לך{" "}
+                <span className="text-black font-black">
+                  {activeTasksCount}
+                </span>{" "}
+                משימות. שדרג ל-Premium כדי לצמוח ללא הגבלה!
+              </p>
+              <div className="flex flex-col gap-4">
+                <button className="bg-black text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3">
+                  <Zap size={20} fill="white" />
+                  שדרג עכשיו ל-Premium
+                </button>
+                <button
+                  onClick={onClose}
+                  className="bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold hover:bg-gray-200 transition-all font-mono uppercase text-xs tracking-widest"
+                >
+                  סגור
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="px-6 py-5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-white sm:rounded-t-[2rem] sticky top-0 z-10 shrink-0">
           <div>
@@ -440,7 +501,8 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) =>
+                        setPhone(formatPhoneNumberInput(e.target.value))}
                       className="input-premium pr-12 text-left ltr"
                       placeholder="050-0000000"
                     />
@@ -468,13 +530,19 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
                     </div>
                   </div>
                   {lookupStatus === "new" && (
-                    <p className="text-[10px] font-bold text-amber-600 mt-2 px-2">
-                      לקוח חדש - לא נמצאו רישומים במערכת
+                    <p className="text-[10px] font-bold text-amber-600 mt-2 px-2 flex items-center gap-2">
+                      <AlertCircle size={10} />{" "}
+                      No vehicles found - Please enter manually
                     </p>
                   )}
                   {lookupStatus === "match" && (
-                    <p className="text-[10px] font-bold text-emerald-600 mt-2 px-2">
-                      לקוח ורכב זוהו בהצלחה!
+                    <p className="text-[10px] font-bold text-emerald-600 mt-2 px-2 flex items-center gap-2">
+                      <Check size={10} /> Vehicle linked successfully
+                    </p>
+                  )}
+                  {lookupStatus === "partial" && (
+                    <p className="text-[10px] font-bold text-blue-600 mt-2 px-2 flex items-center gap-2">
+                      <Car size={10} /> Multiple vehicles - please select
                     </p>
                   )}
                 </div>
@@ -705,38 +773,101 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ onClose }) => {
 
             <div>
               <label className="block text-[10px] font-black text-gray-400 mb-2 px-1 uppercase tracking-widest text-start">
-                דחיפות
+                דחיפות וזמן יעד (SLA)
               </label>
-              <label
-                className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                  isUrgent
-                    ? "border-red-500 bg-red-50"
-                    : "border-gray-100 bg-gray-50"
+              <div className="grid grid-cols-2 gap-4">
+                <label
+                  className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                    isUrgent
+                      ? "border-red-500 bg-red-50"
+                      : "border-gray-100 bg-gray-50"
+                  }`}
+                >
+                  <div
+                    className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                      isUrgent
+                        ? "border-red-500 bg-red-500 text-white"
+                        : "border-gray-300 bg-white"
+                    }`}
+                  >
+                    {isUrgent && <Check size={14} strokeWidth={4} />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isUrgent}
+                    onChange={(e) => setIsUrgent(e.target.checked)}
+                    className="hidden"
+                  />
+                  <span
+                    className={`font-black ${
+                      isUrgent ? "text-red-600" : "text-gray-500"
+                    }`}
+                  >
+                    {isUrgent ? "דחוף מאוד" : "רגיל"}
+                  </span>
+                </label>
+
+                <div className="flex flex-col gap-2">
+                  <select
+                    value={dueIn}
+                    onChange={(e) => setDueIn(e.target.value)}
+                    className="input-premium h-14 text-sm"
+                  >
+                    <option value="30m">צפי סיום: 30 דק׳</option>
+                    <option value="1h">צפי סיום: שעה</option>
+                    <option value="2h">צפי סיום: שעתיים</option>
+                    <option value="4h">צפי סיום: 4 שעות</option>
+                    <option value="custom">אחר (דקות)</option>
+                  </select>
+                  {dueIn === "custom" && (
+                    <input
+                      type="number"
+                      placeholder="הזן דקות..."
+                      value={customMinutes}
+                      onChange={(e) => setCustomMinutes(e.target.value)}
+                      className="input-premium h-12 text-sm text-center animate-fade-in-up"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* PRICING TOGGLE */}
+            <div className="pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowPrice(!showPrice)}
+                className={`flex items-center justify-between w-full p-4 rounded-2xl border-2 transition-all ${
+                  showPrice
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                    : "border-gray-100 bg-gray-50 text-gray-400"
                 }`}
               >
-                <div
-                  className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
-                    isUrgent
-                      ? "border-red-500 bg-red-500 text-white"
-                      : "border-gray-300 bg-white"
-                  }`}
-                >
-                  {isUrgent && <Check size={14} strokeWidth={4} />}
+                <div className="flex items-center gap-3">
+                  <DollarSign size={18} />
+                  <span className="font-black text-sm">
+                    הצעת מחיר ראשונית (Excl. VAT)
+                  </span>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={isUrgent}
-                  onChange={(e) => setIsUrgent(e.target.checked)}
-                  className="hidden"
-                />
-                <span
-                  className={`font-black ${
-                    isUrgent ? "text-red-600" : "text-gray-500"
+                <ChevronDown
+                  size={20}
+                  className={`transition-transform ${
+                    showPrice ? "rotate-180" : ""
                   }`}
-                >
-                  {isUrgent ? "דחוף מאוד" : "רגיל"}
-                </span>
-              </label>
+                />
+              </button>
+
+              {showPrice && (
+                <div className="mt-4 animate-fade-in-up">
+                  <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="input-premium text-center text-xl font-black"
+                    placeholder="0.00 ₪"
+                  />
+                </div>
+              )}
             </div>
 
             {/* TASK ASSIGNMENT SECTION */}

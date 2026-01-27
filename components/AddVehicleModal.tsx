@@ -19,6 +19,8 @@ import {
   fetchVehicleDataFromGov,
   isValidIsraeliPlate,
 } from "../utils/vehicleApi";
+import { playClickSound, scrollToTop } from "../utils/uiUtils";
+import { useEffect } from "react";
 
 interface AddVehicleModalProps {
   onClose: () => void;
@@ -46,6 +48,11 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = (
   const [error, setError] = useState("");
   const [apiSuccess, setApiSuccess] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+
+  // Scroll to top on mount
+  useEffect(() => {
+    scrollToTop();
+  }, []);
 
   const handleAutoFill = async () => {
     const cleanedPlate = cleanLicensePlate(plate);
@@ -438,6 +445,7 @@ const AddVehicleModal: React.FC<AddVehicleModalProps> = (
             type="submit"
             form="add-vehicle-form"
             disabled={loading}
+            onClick={playClickSound}
             className="btn-primary w-full h-16 sm:h-20 flex items-center justify-center gap-4 text-lg sm:text-xl shadow-xl active:scale-95 transition-all touch-target"
           >
             {loading ? <Loader className="animate-spin" /> : (

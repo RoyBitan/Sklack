@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import {
   Appointment,
+  AppointmentStatus,
   Notification as AppNotification,
   PreCheckInData,
   Task,
@@ -19,6 +20,7 @@ import {
 import { useAuth } from "./AuthContext";
 import { supabase } from "../lib/supabase";
 import { formatLicensePlate } from "../utils/formatters";
+import { normalizePhone } from "../utils/phoneUtils";
 import { toast } from "sonner";
 
 interface DataContextType {
@@ -50,6 +52,10 @@ interface DataContextType {
     sendToTeamNow: boolean,
     reminderAt?: string | null,
   ) => Promise<void>;
+  approveAppointment: (
+    appointmentId: string,
+    createTaskNow: boolean,
+  ) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   lookupCustomerByPhone: (
@@ -72,6 +78,7 @@ interface DataContextType {
   fetchTeamMembers: () => Promise<any[]>;
   loadMoreTasks: () => Promise<void>;
   hasMoreTasks: boolean;
+  promoteToAdmin: (userId: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -130,13 +137,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
       // Tasks - Filter out CANCELLED
       let taskQuery = supabase.from("tasks")
         .select(
-          `*, vehicle:vehicles(*, owner:profiles(full_name)), creator:profiles!tasks_created_by_fkey(*), proposals:proposals(*)`,
+          `*, organization:organizations(name), vehicle:vehicles(*, owner:profiles(full_name)), creator:profiles!tasks_created_by_fkey(*), proposals:proposals(*)`,
         )
         .neq("status", "CANCELLED")
         .order("created_at", { ascending: false });
 
       let apptQuery = supabase.from("appointments")
-        .select("*")
+        .select("*, customer:profiles(*), vehicle:vehicles(*)")
         .neq("status", "CANCELLED")
         .order("appointment_date", { ascending: false });
 
@@ -356,14 +363,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
 
   const addVehicle = useCallback(async (vehicleData: Partial<Vehicle>) => {
     const currProfile = profileRef.current;
-    if (!currProfile) return;
+    if (!currProfile?.org_id) return;
     try {
-      const { error } = await supabase.from("vehicles").upsert({
-        ...vehicleData,
-        owner_id: currProfile.id,
-        org_id: currProfile.org_id,
-      }, { onConflict: "plate, org_id" });
-      if (error) throw error;
+      // 1. Check if vehicle already exists
+      const { data: existing } = await supabase
+        .from("vehicles")
+        .select("id, owner_id")
+        .eq("plate", vehicleData.plate)
+        .maybeSingle();
+
+      if (existing) {
+        // If the vehicle exists but has no owner, allow the current user to claim it
+        // OR if the vehicle exists and the current user is an Admin/Staff, let them manage it
+        // OR if the owner is the same as current user
+        if (existing.owner_id && existing.owner_id !== currProfile.id) {
+          // Check if the current user's phone matches the phone in the most recent task for this vehicle
+          const { data: recentTask } = await supabase
+            .from("tasks")
+            .select("metadata")
+            .eq("vehicle_id", existing.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const recentPhone = recentTask?.metadata?.ownerPhone ||
+            recentTask?.metadata?.phone;
+          const userPhone = normalizePhone(currProfile.phone || "");
+
+          if (!recentPhone || normalizePhone(recentPhone) !== userPhone) {
+            toast.error("הרכב כבר רשום ללקוח אחר במערכת");
+            return;
+          }
+        }
+
+        // Update existing (Claim or Refresh)
+        const { error } = await supabase.from("vehicles").update({
+          ...vehicleData,
+          owner_id: currProfile.id,
+          org_id: currProfile.org_id,
+        }).eq("id", existing.id);
+
+        if (error) throw error;
+      } else {
+        // Create new
+        const { error } = await supabase.from("vehicles").insert({
+          ...vehicleData,
+          owner_id: currProfile.id,
+          org_id: currProfile.org_id,
+        });
+        if (error) throw error;
+      }
+
       toast.success("הרכב נוסף בהצלחה");
       await refreshData();
     } catch (e) {
@@ -651,15 +701,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
     if (!currProfile?.org_id) return;
 
     try {
+      // Resolve customer_id from task if not provided
+      let customerId = proposal.customer_id;
+      if (!customerId) {
+        const { data: task } = await supabase.from("tasks").select(
+          "customer_id",
+        ).eq("id", taskId).single();
+        customerId = task?.customer_id;
+      }
+
       const { error } = await supabase.from("proposals").insert({
         org_id: currProfile.org_id,
         task_id: taskId,
-        customer_id: proposal.customer_id || currProfile.id,
+        customer_id: customerId ||
+          (currProfile.role === UserRole.CUSTOMER ? currProfile.id : null),
         description: proposal.description,
         price: proposal.price || null,
-        status: "PENDING",
+        status: proposal.status || "PENDING_MANAGER",
         created_by: currProfile.id,
         photo_url: proposal.photo_url || null,
+        audio_url: proposal.audio_url || null,
       });
       if (error) throw error;
       toast.success("הבקשה נשלחה בהצלחה");
@@ -672,9 +733,91 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
 
   const updateProposal = useCallback(
     async (taskId: string, proposalId: string, data: any) => {
-      console.log("Updating proposal placeholder:", taskId, proposalId, data);
+      try {
+        const { error } = await supabase
+          .from("proposals")
+          .update(data)
+          .eq("id", proposalId);
+
+        if (error) throw error;
+        toast.success("ההצעה עודכנה");
+
+        // Notify if status changed to PENDING_CUSTOMER (Sent to customer)
+        if (data.status === "PENDING_CUSTOMER") {
+          // Fetch task directly to get customer ID since we might not have it in the partial data
+          const { data: task } = await supabase.from("tasks").select(
+            "customer_id, title",
+          ).eq("id", taskId).single();
+          if (task?.customer_id) {
+            await sendSystemNotification(
+              task.customer_id,
+              "הצעת תיקון חדשה 🛠️",
+              `המוסך שלח הצעת מחיר לתיקון נוסף עבור ${task.title}. אנא אשר או דחה.`,
+              "PROPOSAL_RECEIVED",
+              taskId,
+            );
+          }
+        }
+
+        // Notify if customer Approved/Rejected (Sent to Staff/Admin)
+        if (data.status === "APPROVED" || data.status === "REJECTED") {
+          const { data: task } = await supabase.from("tasks").select(
+            "org_id, title, assigned_to, price",
+          ).eq("id", taskId).single();
+
+          if (task) {
+            // Update total task price if approved
+            if (data.status === "APPROVED") {
+              const { data: proposal } = await supabase.from("proposals")
+                .select("price").eq("id", proposalId).single();
+              if (proposal?.price) {
+                const newPrice = (task.price || 0) + proposal.price;
+                await supabase.from("tasks").update({ price: newPrice }).eq(
+                  "id",
+                  taskId,
+                );
+              }
+            }
+
+            // Notify admins AND assigned staff
+            const recipients = new Set<string>();
+            const { data: admins } = await supabase
+              .from("profiles")
+              .select("id")
+              .eq("org_id", task.org_id)
+              .eq("role", UserRole.SUPER_MANAGER);
+
+            if (admins) admins.forEach((a) => recipients.add(a.id));
+            if (task.assigned_to) {
+              task.assigned_to.forEach((id: string) => recipients.add(id));
+            }
+
+            const titleText = data.status === "APPROVED"
+              ? "תיקון אושר! Proceed with work ✅"
+              : "הצעה נדחתה ❌";
+            const msgText = data.status === "APPROVED"
+              ? `הלקוח אישר את התיקון הנוסף עבור: ${task.title}`
+              : `הלקוח דחה את התיקון הנוסף עבור: ${task.title}`;
+
+            for (const recipientId of Array.from(recipients)) {
+              await sendSystemNotification(
+                recipientId,
+                titleText,
+                msgText,
+                "PROPOSAL_UPDATE",
+                taskId,
+              );
+            }
+          }
+        }
+
+        refreshData();
+      } catch (e) {
+        console.error("Update proposal failed:", e);
+        toast.error("נכשל בעדכון ההצעה");
+      }
     },
-    [],
+    [refreshData, sendSystemNotification],
   );
 
   const submitCheckIn = useCallback(async (data: PreCheckInData) => {
@@ -698,28 +841,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
     }
 
     const isAppointment = !!data.appointmentDate;
-    const title = isAppointment
-      ? `Appointment Request: ${data.serviceTypes?.join(", ") || "General"}`
-      : `Check-In: ${data.faultDescription || "General Checkup"}`;
-
-    const { error } = await supabase.from("tasks").insert({
+    const { error } = await supabase.from("appointments").insert({
       org_id: orgId,
       vehicle_id: v.id,
       customer_id: currProfile.id,
-      created_by: currProfile.id,
-      title: title,
+      service_type: data.serviceTypes?.join(", ") || "General",
       description: data.faultDescription,
-      status: TaskStatus.WAITING_FOR_APPROVAL,
+      appointment_date: data.appointmentDate ||
+        new Date().toISOString().split("T")[0],
+      appointment_time: data.appointmentTime ||
+        new Date().toLocaleTimeString("he-IL", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      mileage: data.currentMileage ? parseInt(data.currentMileage) : null,
+      status: AppointmentStatus.PENDING,
       metadata: {
-        ...data,
-        type: isAppointment ? "APPOINTMENT_REQUEST" : "CHECK_IN",
+        customerPhone: data.ownerPhone,
+        customerEmail: data.ownerEmail,
+        customerAddress: data.ownerAddress,
         paymentMethod: data.paymentMethod,
         submittedAt: Date.now(),
       },
     });
 
     if (error) {
-      console.error("Submit Check-In failed:", error);
+      console.error("Submit Appointment/Check-In failed:", error);
       toast.error("נכשל בשליחת הבקשה");
       throw error;
     }
@@ -790,6 +937,112 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
       } catch (e) {
         console.error("Approve task failed:", e);
         toast.error("נכשל באישור המשימה");
+        throw e;
+      }
+    },
+    [refreshData, sendSystemNotification],
+  );
+
+  const approveAppointment = useCallback(
+    async (appointmentId: string, createTaskNow: boolean) => {
+      const currProfile = profileRef.current;
+      if (!currProfile) return;
+
+      try {
+        // 1. Fetch appointment details with customer and vehicle data
+        const { data: appt, error: apptError } = await supabase
+          .from("appointments")
+          .select("*, customer:profiles(*), vehicle:vehicles(*)")
+          .eq("id", appointmentId)
+          .single();
+
+        if (apptError || !appt) {
+          throw apptError || new Error("Appointment not found");
+        }
+
+        const today = new Date().toISOString().split("T")[0];
+        const isToday = appt.appointment_date === today;
+
+        // 2. Determine new status
+        const newStatus = isToday
+          ? AppointmentStatus.APPROVED
+          : AppointmentStatus.SCHEDULED;
+
+        let createdTaskId: string | null = null;
+
+        // 3. Create Task if requested (user chose to open task now)
+        if (createTaskNow) {
+          const { data: newTask, error: taskError } = await supabase
+            .from("tasks")
+            .insert({
+              org_id: appt.org_id,
+              vehicle_id: appt.vehicle_id,
+              customer_id: appt.customer_id,
+              created_by: currProfile.id,
+              title: `טיפול: ${appt.service_type}`,
+              description: appt.description,
+              status: TaskStatus.WAITING,
+              priority: "NORMAL",
+              metadata: {
+                appointment_id: appt.id,
+                appointmentDate: appt.appointment_date,
+                appointmentTime: appt.appointment_time,
+                mileage: appt.mileage,
+                // Auto-map customer profile data to task metadata
+                customerPhone: appt.customer?.phone ||
+                  appt.customer_phone ||
+                  appt.metadata?.customerPhone,
+                customerEmail: appt.customer_email ||
+                  appt.metadata?.customerEmail,
+                customerAddress: appt.customer?.metadata?.address ||
+                  appt.customer_address ||
+                  appt.metadata?.customerAddress,
+                customerName: appt.customer?.full_name || appt.customer_name,
+                source: "APPOINTMENT",
+              },
+            })
+            .select()
+            .single();
+
+          if (taskError) throw taskError;
+          createdTaskId = newTask?.id || null;
+        }
+
+        // 4. Update appointment with new status and task_id linkage
+        const { error: updateError } = await supabase
+          .from("appointments")
+          .update({
+            status: newStatus,
+            task_id: createdTaskId, // Link the created task
+          })
+          .eq("id", appointmentId);
+
+        if (updateError) throw updateError;
+
+        // 5. Notify customer about approval
+        if (appt.customer_id) {
+          await sendSystemNotification(
+            appt.customer_id,
+            isToday ? "התור שלך אושר! ✅" : "התור שלך נקבע! 📅",
+            isToday
+              ? `הבקשה שלך ל"${appt.service_type}" אושרה. אנחנו מחכים לך היום בשעה ${appt.appointment_time}.`
+              : `נקבע לך תור למועד: ${appt.appointment_date} בשעה ${appt.appointment_time}.`,
+            "APPOINTMENT_APPROVED",
+            appt.id,
+          );
+        }
+
+        const successMessage = createTaskNow
+          ? "התור אושר ומשימה נפתחה לצוות"
+          : isToday
+          ? "התור אושר"
+          : "התור תוזמן בהצלחה";
+
+        toast.success(successMessage);
+        await refreshData();
+      } catch (e: any) {
+        console.error("Approve appointment failed:", e);
+        toast.error("נכשל באישור התור: " + e.message);
         throw e;
       }
     },
@@ -942,6 +1195,97 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, []);
 
+  const promoteToAdmin = useCallback(async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ role: UserRole.SUPER_MANAGER })
+        .eq("id", userId);
+      if (error) throw error;
+      toast.success("Staff promoted to Admin successfully");
+      refreshData();
+    } catch (e) {
+      console.error("Promotion failed:", e);
+      toast.error("Failed to promote user");
+    }
+  }, [refreshData]);
+
+  const sendMessage = useCallback(
+    async (taskId: string, content: string, isInternal: boolean = false) => {
+      const currProfile = profileRef.current;
+      if (!currProfile?.org_id) return;
+
+      try {
+        const { data: currentTask } = await supabase
+          .from("tasks")
+          .select("customer_id")
+          .eq("id", taskId)
+          .single();
+
+        const { error } = await supabase.from("task_messages").insert({
+          task_id: taskId,
+          org_id: currProfile.org_id,
+          sender_id: currProfile.id,
+          content,
+          is_internal: isInternal,
+        });
+
+        if (error) throw error;
+
+        // Notify the other side
+        if (currProfile.role === UserRole.CUSTOMER) {
+          // Notify managers/staff
+          const { data: staff } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("org_id", currProfile.org_id)
+            .in("role", [UserRole.SUPER_MANAGER, UserRole.STAFF]);
+
+          if (staff) {
+            staff.map((s) =>
+              sendSystemNotification(
+                s.id,
+                "הודעה חדשה מהלקוח 💬",
+                content.substring(0, 50) + (content.length > 50 ? "..." : ""),
+                "CHAT_MESSAGE",
+                taskId,
+              )
+            );
+          }
+        } else {
+          // Notify customer
+          if (currentTask?.customer_id) {
+            sendSystemNotification(
+              currentTask.customer_id,
+              "הודעה חדשה מהמוסך 💬",
+              content.substring(0, 50) + (content.length > 50 ? "..." : ""),
+              "CHAT_MESSAGE",
+              taskId,
+            );
+          }
+        }
+      } catch (e) {
+        console.error("Failed to send message:", e);
+        toast.error("שליחת הודעה נכשלה");
+      }
+    },
+    [sendSystemNotification],
+  );
+
+  const getTaskMessages = useCallback(async (taskId: string) => {
+    const { data, error } = await supabase
+      .from("task_messages")
+      .select("*, sender:profiles(id, full_name, role, avatar_url)")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Failed to fetch messages:", error);
+      return [];
+    }
+    return data;
+  }, []);
+
   const value = useMemo(() => ({
     ...dataState,
     refreshData,
@@ -958,8 +1302,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
     updateTask,
     updateOrganization,
     approveTask,
+    approveAppointment,
     markNotificationRead,
     markAllNotificationsRead,
+    promoteToAdmin,
+    sendMessage,
+    getTaskMessages,
     lookupCustomerByPhone,
     fetchTeamMembers,
     notifyMultiple,
@@ -981,6 +1329,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = (
     updateTask,
     updateOrganization,
     approveTask,
+    approveAppointment,
     markNotificationRead,
     markAllNotificationsRead,
     lookupCustomerByPhone,

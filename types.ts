@@ -50,6 +50,20 @@ export enum AppointmentStatus {
   APPROVED = "APPROVED",
   REJECTED = "REJECTED",
   CANCELLED = "CANCELLED",
+  SCHEDULED = "SCHEDULED",
+}
+
+export enum SubscriptionTier {
+  FREE = "FREE",
+  BASIC = "BASIC",
+  PREMIUM = "PREMIUM",
+}
+
+export enum SubscriptionStatus {
+  TRIALING = "TRIALING",
+  ACTIVE = "ACTIVE",
+  PAST_DUE = "PAST_DUE",
+  CANCELED = "CANCELED",
 }
 
 export interface Organization {
@@ -58,8 +72,9 @@ export interface Organization {
   logo_url?: string;
   garage_code: string;
   created_at: string;
-  subscription_tier?: string;
-  subscription_status?: string;
+  subscription_tier: SubscriptionTier;
+  subscription_status: SubscriptionStatus;
+  trial_ends_at?: string;
   settings?: Record<string, any>;
 }
 
@@ -128,6 +143,7 @@ export interface Task {
   vehicle?: Vehicle;
   creator?: Profile;
   proposals?: TaskProposal[];
+  organization?: Organization;
 }
 
 export interface TaskProposal {
@@ -143,23 +159,43 @@ export interface TaskProposal {
   created_at: string;
 }
 
+export interface TaskMessage {
+  id: string;
+  task_id: string;
+  org_id: string;
+  sender_id: string;
+  content: string;
+  is_internal: boolean;
+  created_at: string;
+  sender?: Profile;
+}
+
 export interface Appointment {
   id: string;
   org_id: string;
   customer_id: string | null;
   customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  customer_address?: string;
+  vehicle_id?: string | null;
   vehicle_plate?: string;
   service_type: string;
   description: string | null;
   appointment_date: string;
   appointment_time: string;
   duration?: string;
+  mileage?: number;
   status: AppointmentStatus;
+  task_id?: string | null; // Links to the task created when approved
+  requested_at?: string; // When customer submitted the check-in request
+  metadata?: Record<string, any>;
   created_at: string;
 
   // Virtual joins
   customer?: Profile;
   vehicle?: Vehicle;
+  task?: Task;
 }
 
 export interface AuditLog {

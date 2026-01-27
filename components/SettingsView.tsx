@@ -23,7 +23,12 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { isValidPhone, normalizePhone } from "../utils/phoneUtils";
+import {
+  formatPhoneDisplay,
+  formatPhoneNumberInput,
+  isValidPhone,
+  normalizePhone,
+} from "../utils/phoneUtils";
 import { sanitize } from "../utils/formatters";
 import { compressImage, uploadAsset } from "../utils/assetUtils";
 import LoadingSpinner from "./LoadingSpinner";
@@ -43,9 +48,9 @@ const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
   const { updateUser } = useData();
   const { refreshProfile } = useAuth();
   const [fullName, setFullName] = useState(user?.full_name || "");
-  const [phone, setPhone] = useState(user?.phone || "");
+  const [phone, setPhone] = useState(formatPhoneDisplay(user?.phone || ""));
   const [secondaryPhone, setSecondaryPhone] = useState(
-    user?.secondary_phone || "",
+    formatPhoneDisplay(user?.secondary_phone || ""),
   );
   const [showSecondary, setShowSecondary] = useState(!!user?.secondary_phone);
   const [address, setAddress] = useState(user?.address || "");
@@ -122,7 +127,7 @@ const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
             type="tel"
             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(formatPhoneNumberInput(e.target.value))}
             placeholder="050-0000000"
           />
         </div>
@@ -155,7 +160,8 @@ const ProfileEditForm: React.FC<{ user: any }> = ({ user }) => {
                 type="tel"
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
                 value={secondaryPhone}
-                onChange={(e) => setSecondaryPhone(e.target.value)}
+                onChange={(e) =>
+                  setSecondaryPhone(formatPhoneNumberInput(e.target.value))}
                 placeholder="נוסף"
               />
             </div>

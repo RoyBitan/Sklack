@@ -8,7 +8,6 @@ import {
   Copy,
   Edit2,
   Plus,
-  QrCode,
   Search,
   Shield,
   ShieldCheck,
@@ -23,8 +22,9 @@ import InviteMemberModal from "./InviteMemberModal";
 import EditGarageCodeModal from "./EditGarageCodeModal";
 import LoadingSpinner from "./LoadingSpinner";
 import { MembershipStatus, UserRole } from "../types";
-import QRCode from "qrcode";
 import { toast } from "sonner";
+import { formatPhoneDisplay } from "../utils/phoneUtils";
+import { playClickSound, scrollToTop } from "../utils/uiUtils";
 
 type GarageTab = "VEHICLES" | "TEAM" | "CUSTOMERS";
 
@@ -40,7 +40,6 @@ const GarageView: React.FC = () => {
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [qrCodeUrl, setQrCodeUrl] = useState("");
 
   // Garage Name Editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -54,15 +53,7 @@ const GarageView: React.FC = () => {
     if (activeTab === "TEAM" || activeTab === "CUSTOMERS") {
       fetchMembers();
     }
-    // Generate QR code whenever garage_code is available
-    if (profile?.organization?.garage_code) {
-      QRCode.toDataURL(profile.organization.garage_code, {
-        width: 300,
-        margin: 2,
-        color: { dark: "#000000", light: "#ffffff" },
-      }).then(setQrCodeUrl).catch(console.error);
-    }
-  }, [activeTab, profile?.org_id, profile?.organization?.garage_code]);
+  }, [activeTab, profile?.org_id]);
 
   const fetchMembers = async () => {
     if (!profile?.org_id) return;
@@ -104,20 +95,8 @@ const GarageView: React.FC = () => {
   };
 
   const handleCodeUpdateSuccess = async (newCode: string) => {
-    // Regenerate QR code with new code
-    try {
-      const newQrUrl = await QRCode.toDataURL(newCode, {
-        width: 300,
-        margin: 2,
-        color: { dark: "#000000", light: "#ffffff" },
-      });
-      setQrCodeUrl(newQrUrl);
-
-      // Refresh profile to get updated garage code
-      window.location.reload();
-    } catch (error) {
-      console.error("Error regenerating QR code:", error);
-    }
+    // Refresh profile to get updated garage code
+    window.location.reload();
   };
 
   // Filtered lists
@@ -234,27 +213,14 @@ const GarageView: React.FC = () => {
         </div>
       </div>
 
-      {/* QR Code Section - ALWAYS VISIBLE AT TOP */}
       <div className="bg-gradient-to-br from-black via-gray-900 to-black rounded-[2rem] p-8 md:p-10 text-white relative overflow-hidden border border-gray-800">
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl">
         </div>
 
         <div className="relative z-10 flex flex-col items-center text-center space-y-6">
-          {/* QR Code */}
-          {qrCodeUrl && (
-            <div className="bg-white p-4 rounded-2xl shadow-2xl">
-              <img
-                src={qrCodeUrl}
-                alt="QR Code"
-                className="w-48 h-48"
-              />
-            </div>
-          )}
-
           {/* Garage Code Display */}
           <div className="space-y-3 w-full max-w-md">
             <div className="flex items-center justify-center gap-2 text-blue-400 font-black text-xs uppercase tracking-[0.2em]">
-              <QrCode size={16} />
               קוד המוסך
             </div>
 
@@ -292,15 +258,10 @@ const GarageView: React.FC = () => {
                 : (
                   <>
                     <Copy size={18} />
-                    <span>העתק קוד</span>
+                    <span>העתק קוד מוסך</span>
                   </>
                 )}
             </button>
-
-            {/* Hebrew Caption */}
-            <p className="text-white/60 text-sm font-bold leading-relaxed px-4">
-              סרוק את הברקוד או הזן את קוד המוסך כדי להצטרף
-            </p>
           </div>
         </div>
       </div>
@@ -309,7 +270,10 @@ const GarageView: React.FC = () => {
       <div className="flex justify-end">
         {activeTab === "VEHICLES" && (
           <button
-            onClick={() => setShowAddVehicle(true)}
+            onClick={() => {
+              playClickSound();
+              setShowAddVehicle(true);
+            }}
             className="btn-primary flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all w-full md:w-auto justify-center"
           >
             <Plus size={20} />
@@ -475,7 +439,7 @@ const GarageView: React.FC = () => {
                             {member.full_name || "ללא שם"}
                           </div>
                           <div className="text-xs text-gray-500 font-bold">
-                            {member.phone}
+                            {formatPhoneDisplay(member.phone)}
                           </div>
                         </div>
                       </div>
@@ -504,7 +468,9 @@ const GarageView: React.FC = () => {
                       {member.full_name || "ללא שם"}
                     </div>
                     <div className="text-xs text-gray-400 font-mono mt-0.5">
-                      {member.phone || "ללא טלפון"}
+                      {member.phone
+                        ? formatPhoneDisplay(member.phone)
+                        : "ללא טלפון"}
                     </div>
                   </div>
                   <div>

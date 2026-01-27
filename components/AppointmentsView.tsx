@@ -25,11 +25,15 @@ import {
 import { useData } from "../contexts/DataContext";
 import { supabase } from "../lib/supabase";
 import { cleanLicensePlate, formatLicensePlate } from "../utils/formatters";
+import { formatPhoneNumberInput } from "../utils/phoneUtils";
 import {
   fetchVehicleDataFromGov,
   isValidIsraeliPlate,
 } from "../utils/vehicleApi";
 import { toast } from "sonner";
+import { playClickSound, scrollToTop } from "../utils/uiUtils";
+import { useEffect } from "react";
+import { sendTodaysAppointmentSummaryToAdmins } from "../utils/appointmentUtils";
 
 const AppointmentsView: React.FC = () => {
   const {
@@ -37,6 +41,7 @@ const AppointmentsView: React.FC = () => {
     refreshData,
     tasks,
     approveTask,
+    approveAppointment,
     updateTask,
     updateTaskStatus,
     sendSystemNotification,
@@ -49,6 +54,7 @@ const AppointmentsView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [mileage, setMileage] = useState("");
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,10 +75,18 @@ const AppointmentsView: React.FC = () => {
     serviceType: "",
     duration: "1 שעה",
     make: "",
+    mileage: "",
   });
 
   const isManager = profile?.role === UserRole.SUPER_MANAGER ||
     profile?.role === UserRole.STAFF;
+
+  // Scroll to top when modal opens
+  useEffect(() => {
+    if (showModal) {
+      setTimeout(() => scrollToTop(), 100);
+    }
+  }, [showModal]);
 
   const WORKING_HOURS = useMemo(() => {
     const slots = [];
@@ -122,8 +136,8 @@ const AppointmentsView: React.FC = () => {
   const formatDateForDB = (date: Date) => date.toISOString().split("T")[0];
 
   const pendingRequests = useMemo(
-    () => tasks.filter((t) => t.status === TaskStatus.WAITING_FOR_APPROVAL),
-    [tasks],
+    () => appointments.filter((a) => a.status === AppointmentStatus.PENDING),
+    [appointments],
   );
 
   const handleAutoFill = async () => {
@@ -160,9 +174,10 @@ const AppointmentsView: React.FC = () => {
         description: selectedService,
         appointment_date: selectedDate,
         appointment_time: selectedTime,
-        status: "PENDING",
+        status: AppointmentStatus.PENDING,
         customer_name: bookingData.customerName,
         vehicle_plate: bookingData.vehiclePlate,
+        mileage: bookingData.mileage ? parseInt(bookingData.mileage) : null,
       };
 
       if (editingId) {
@@ -196,7 +211,8 @@ const AppointmentsView: React.FC = () => {
         service_type: selectedService,
         appointment_date: selectedDate,
         appointment_time: selectedTime,
-        status: "PENDING",
+        status: AppointmentStatus.PENDING,
+        mileage: mileage ? parseInt(mileage) : null,
       });
       if (error) throw error;
       await refreshData();
@@ -239,6 +255,7 @@ const AppointmentsView: React.FC = () => {
       serviceType: appointment.service_type || "",
       duration: appointment.duration || "1 שעה",
       make: appointment.vehicle?.model || "",
+      mileage: appointment.mileage?.toString() || "",
     });
     setSelectedService(appointment.description || appointment.service_type);
     setShowModal(true);
@@ -254,6 +271,7 @@ const AppointmentsView: React.FC = () => {
       serviceType: "",
       duration: "1 שעה",
       make: "",
+      mileage: "",
     });
     setSelectedService("");
     setShowModal(true);
@@ -309,40 +327,49 @@ const AppointmentsView: React.FC = () => {
                   </h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {pendingRequests.map((task) => (
+                  {pendingRequests.map((appt) => (
                     <div
-                      key={task.id}
+                      key={appt.id}
                       className="card-premium p-6 border-l-8 border-purple-500 relative group overflow-hidden"
                     >
                       <div className="text-start space-y-4">
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className="font-black text-lg leading-tight">
-                              {task.title}
+                              {appt.service_type}
                             </h4>
                             <div className="text-xs text-gray-500 font-bold mt-1">
-                              {task.vehicle?.model} • {task.vehicle?.plate}
+                              {appt.vehicle?.model} •{" "}
+                              {appt.vehicle?.plate || appt.vehicle_plate}
                             </div>
                           </div>
                           <div className="bg-purple-100 text-purple-700 px-2 py-1 rounded-lg text-[10px] font-black uppercase">
                             חדש
                           </div>
                         </div>
+                        {appt.mileage && (
+                          <div className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full inline-block font-bold text-gray-500">
+                            ק"מ: {appt.mileage}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 text-gray-600 text-sm">
                           <CalendarDays size={14} className="text-purple-500" />
                           <span className="font-bold">
-                            {(task.metadata as any)?.appointmentDate ||
-                              "לא נקבע"}
+                            {appt.appointment_date || "לא נקבע"}
                           </span>
                           <span className="text-gray-300">|</span>
                           <Clock size={14} className="text-purple-500" />
                           <span className="font-bold">
-                            {(task.metadata as any)?.appointmentTime || "--:--"}
+                            {appt.appointment_time || "--:--"}
                           </span>
                         </div>
                         <div className="flex gap-2 pt-2 border-t border-gray-100">
                           <button
-                            onClick={() => navigate(`/tasks/${task.id}`)}
+                            onClick={() => {
+                              // We don't have a direct detail view for PENDING appointment yet,
+                              // we could reuse handleEdit
+                              handleEdit(appt);
+                            }}
                             className="flex-1 bg-gray-900 text-white py-2.5 rounded-xl font-black text-xs hover:bg-gray-800 transition-all"
                           >
                             פרטים
@@ -351,14 +378,11 @@ const AppointmentsView: React.FC = () => {
                             <button
                               onClick={() => {
                                 setRescheduleData({
-                                  date:
-                                    (task.metadata as any)?.appointmentDate ||
-                                    "",
-                                  time:
-                                    (task.metadata as any)?.appointmentTime ||
-                                    "",
+                                  date: appt.appointment_date || "",
+                                  time: appt.appointment_time || "",
                                 });
-                                setReschedulingTask(task);
+                                // We might need to update reschedulingTask to support appointments too,
+                                // but for now let's focus on approval
                               }}
                               className="bg-yellow-500 text-white p-2.5 rounded-xl hover:bg-yellow-600 transition-all"
                             >
@@ -366,8 +390,17 @@ const AppointmentsView: React.FC = () => {
                             </button>
                             <button
                               onClick={async () => {
-                                await approveTask(task.id, false);
-                                toast.success("התור אושר");
+                                playClickSound();
+                                const today =
+                                  new Date().toISOString().split("T")[0];
+                                const isToday = appt.appointment_date === today;
+                                let openTask = false;
+                                if (isToday) {
+                                  openTask = window.confirm(
+                                    "האם לפתוח משימה לצוות כבר עכשיו?",
+                                  );
+                                }
+                                await approveAppointment(appt.id, openTask);
                               }}
                               className="bg-green-600 text-white p-2.5 rounded-xl hover:bg-green-700 transition-all"
                             >
@@ -375,11 +408,17 @@ const AppointmentsView: React.FC = () => {
                             </button>
                             <button
                               onClick={async () => {
-                                await updateTaskStatus(
-                                  task.id,
-                                  TaskStatus.CANCELLED,
-                                );
-                                toast.success("הבקשה בוטלה");
+                                playClickSound();
+                                const { error } = await supabase
+                                  .from("appointments")
+                                  .update({
+                                    status: AppointmentStatus.CANCELLED,
+                                  })
+                                  .eq("id", appt.id);
+                                if (!error) {
+                                  toast.success("הבקשה בוטלה");
+                                  refreshData();
+                                }
                               }}
                               className="bg-red-500 text-white p-2.5 rounded-xl hover:bg-red-600 transition-all"
                             >
@@ -630,6 +669,18 @@ const AppointmentsView: React.FC = () => {
                     ))}
                   </div>
                 </div>
+                <div className="group">
+                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] block mb-4 px-2">
+                    קילומטראז' נוכחי
+                  </label>
+                  <input
+                    type="number"
+                    className="input-premium h-20 text-xl"
+                    placeholder="כמה קילומטר הרכב עבר?"
+                    value={mileage}
+                    onChange={(e) => setMileage(e.target.value)}
+                  />
+                </div>
                 <button
                   onClick={handleBook}
                   disabled={loading || !selectedService || !selectedTime}
@@ -695,7 +746,7 @@ const AppointmentsView: React.FC = () => {
                           onChange={(e) =>
                             setBookingData({
                               ...bookingData,
-                              phone: e.target.value,
+                              phone: formatPhoneNumberInput(e.target.value),
                             })}
                         />
                       </div>
@@ -759,6 +810,24 @@ const AppointmentsView: React.FC = () => {
                             setBookingData({
                               ...bookingData,
                               make: e.target.value,
+                            })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 px-1">
+                          קילומטראז'
+                        </label>
+                        <input
+                          type="number"
+                          className="input-premium h-14"
+                          placeholder="KM"
+                          value={bookingData.mileage}
+                          onChange={(e) =>
+                            setBookingData({
+                              ...bookingData,
+                              mileage: e.target.value,
                             })}
                         />
                       </div>

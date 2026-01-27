@@ -33,6 +33,12 @@ import {
 } from "lucide-react";
 import EditTaskModal from "./EditTaskModal";
 import { formatLicensePlate } from "../utils/formatters";
+import { playClickSound } from "../utils/uiUtils";
+import ProposalCreationModal from "./ProposalCreationModal";
+import HandOverModal from "./HandOverModal";
+import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
+import TaskChat from "./TaskChat";
 
 interface TaskCardProps {
   task: Task;
@@ -53,6 +59,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [showHandOverModal, setShowHandOverModal] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [assignedWorkers, setAssignedWorkers] = useState<Profile[]>([]);
 
   const isManager = profile?.role === UserRole.SUPER_MANAGER;
@@ -73,6 +82,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   }, [task.assigned_to]);
 
   const updateStatus = async (newStatus: TaskStatus) => {
+    if (newStatus === TaskStatus.COMPLETED) {
+      playClickSound();
+    }
     setUpdating(true);
     try {
       await updateTaskStatus(task.id, newStatus);
@@ -84,6 +96,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   };
 
   const handleClaim = async () => {
+    playClickSound();
     setUpdating(true);
     try {
       await claimTask(task.id);
@@ -95,6 +108,12 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   };
 
   const handleRelease = async () => {
+    // If staff is releasing, show the mandatory Hand-over modal
+    if (isStaff && task.assigned_to?.includes(profile?.id || "")) {
+      setShowHandOverModal(true);
+      return;
+    }
+
     if (!window.confirm("האם אתה בטוח שברצונך לשחרר משימה זו חזרה למאגר?")) {
       return;
     }
@@ -108,6 +127,69 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     }
   };
 
+  const confirmHandOver = async (summary: {
+    completed: string;
+    remaining: string;
+  }) => {
+    setUpdating(true);
+    try {
+      // Add hand-over notes to metadata
+      const newMetadata = {
+        ...(task.metadata || {}),
+        handOverNotes: {
+          completed: summary.completed,
+          remaining: summary.remaining,
+          by: profile?.full_name,
+          at: new Date().toISOString(),
+        },
+      };
+
+      // We need an updateTask function in DataContext or use supabase directly
+      // DataContext has updateTask
+      await updateTaskStatus(task.id, task.status); // Just to trigger a refresh if needed, but we need to update metadata
+      const { error } = await supabase
+        .from("tasks")
+        .update({ metadata: newMetadata })
+        .eq("id", task.id);
+
+      if (error) throw error;
+
+      await releaseTask(task.id);
+      toast.success("המשימה שוחררה עם סיכום עבודה");
+    } catch (err) {
+      console.error("Hand-over failed", err);
+      toast.error("שגיאה בתהליך השחרור");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const isOverdue = React.useMemo(() => {
+    if (
+      !task.allotted_time || task.status === TaskStatus.COMPLETED ||
+      !task.started_at
+    ) {
+      return false;
+    }
+    const startedAt = new Date(task.started_at).getTime();
+    const deadline = startedAt + task.allotted_time * 60 * 1000;
+    return Date.now() > deadline;
+  }, [task.started_at, task.allotted_time, task.status]);
+
+  const timeLeft = React.useMemo(() => {
+    if (
+      !task.allotted_time || task.status === TaskStatus.COMPLETED ||
+      !task.started_at
+    ) {
+      return null;
+    }
+    const startedAt = new Date(task.started_at).getTime();
+    const deadline = startedAt + task.allotted_time * 60 * 1000;
+    const diff = deadline - Date.now();
+    const mins = Math.floor(diff / (1000 * 60));
+    return mins;
+  }, [task.started_at, task.allotted_time, task.status]);
+
   const handleDelete = async () => {
     if (!window.confirm("האם אתה בטוח שברצונך למחוק משימה זו?")) return;
     try {
@@ -118,8 +200,15 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   };
 
   const getPriorityInfo = (p: Priority) => {
-    // Simple logic: Urgent/Critical get red border. Normal gets nothing.
+    // Simple logic: Urgent/Critical or OVERDUE get red border.
     const isUrgent = p === Priority.URGENT || p === Priority.CRITICAL;
+    if (isOverdue && isManager) {
+      return {
+        ring: "shadow-[0_0_40px_rgba(255,0,0,0.4)]",
+        border: "border-4 border-red-600 animate-pulse-slow",
+        label: "OVERDUE ⏰",
+      };
+    }
     if (isUrgent) {
       return {
         ring: "shadow-[0_0_30px_rgba(220,38,38,0.3)]",
@@ -171,12 +260,22 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                     <div className="text-base font-black text-gray-400 italic">
                       {task.vehicle.model}
                     </div>
-                    <div className="bg-[#FFE600] border-2 border-black rounded-lg px-2.5 py-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                      <span className="font-mono font-black text-sm tracking-widest">
+                    <div className="bg-[#FFE600] border-2 border-black rounded-xl px-3 py-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rotate-[-1deg] group-hover:rotate-0 transition-transform duration-500">
+                      <span className="font-mono font-black text-sm tracking-widest ltr">
                         {formatLicensePlate(task.vehicle.plate)}
                       </span>
                     </div>
                   </>
+                )}
+                {isOverdue && isManager && (
+                  <div className="bg-red-500 text-white px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg animate-bounce-subtle">
+                    OVERDUE ⏰
+                  </div>
+                )}
+                {(pInfo as any).label && (
+                  <div className="bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-black animate-bounce-subtle shadow-lg">
+                    {(pInfo as any).label}
+                  </div>
                 )}
               </div>
 
@@ -306,14 +405,29 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                             <RotateCcw size={16} />
                           </button>
                           {task.status !== TaskStatus.COMPLETED && (
-                            <button
-                              onClick={() => updateStatus(TaskStatus.COMPLETED)}
-                              disabled={updating}
-                              className="h-10 px-4 bg-green-500 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-green-600 transition-all shadow-md active:scale-95"
-                            >
-                              <CheckCircle2 size={16} />
-                              סיים טיפול
-                            </button>
+                            <div className="flex gap-2">
+                              {isStaff && (
+                                <button
+                                  onClick={() => setShowProposalModal(true)}
+                                  className="h-10 px-4 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-amber-500 hover:text-white transition-all shadow-sm active:scale-95 group/upsell"
+                                >
+                                  <Sparkles
+                                    size={16}
+                                    className="text-amber-500 group-hover/upsell:text-white"
+                                  />
+                                  תיקון נוסף
+                                </button>
+                              )}
+                              <button
+                                onClick={() =>
+                                  updateStatus(TaskStatus.COMPLETED)}
+                                disabled={updating}
+                                className="h-10 px-4 bg-green-500 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-green-600 transition-all shadow-md active:scale-95"
+                              >
+                                <CheckCircle2 size={16} />
+                                סיים טיפול
+                              </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -348,7 +462,15 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
           {/* Combined Footer Info (Date/Time) */}
           <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-4 lg:border-r border-gray-100 lg:pr-6 mt-2 lg:mt-0 pt-3 lg:pt-0 border-t lg:border-t-0">
             <div className="flex items-center gap-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-              <div className="flex items-center gap-1.5">
+              {isManager && timeLeft !== null && (
+                <div className="flex items-center gap-1.5 text-blue-600">
+                  <Clock size={12} className="text-blue-400" />
+                  <span>
+                    {timeLeft > 0 ? `${timeLeft} דק׳ לסיום` : "זמן עבר! 🚨"}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 border-r border-gray-100 pr-4">
                 <Clock size={12} className="text-gray-300" />
                 <span>
                   {new Date(task.created_at).toLocaleTimeString("he-IL", {
@@ -374,6 +496,42 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
       {/* Expanded Content */}
       {expanded && (
         <div className="bg-gray-50/70 p-6 md:p-12 border-t-2 border-gray-100 animate-fade-in-up">
+          {/* Hand-over Notes if they exist - HIGHLIGHTED AT TOP */}
+          {(task.metadata as any)?.handOverNotes && (
+            <div className="mb-8 animate-fade-in-up border-r-8 border-amber-500 bg-amber-50 p-8 rounded-[2.5rem] shadow-md">
+              <div className="flex items-center gap-3 mb-4 text-amber-700">
+                <ArrowRightLeft size={24} />
+                <label className="text-sm font-black uppercase tracking-[0.2em]">
+                  סיכום העברת מקל (Baton Notes)
+                </label>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-widest mb-2">
+                    מה בוצע ע"י {(task.metadata as any).handOverNotes.by}
+                  </div>
+                  <div className="text-lg font-bold text-gray-800 leading-relaxed italic">
+                    "{(task.metadata as any).handOverNotes.completed}"
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-widest mb-2">
+                    משימות שנותרו לביצוע
+                  </div>
+                  <div className="text-lg font-black text-amber-700 leading-relaxed underline decoration-amber-300 underline-offset-4">
+                    "{(task.metadata as any).handOverNotes.remaining}"
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-[9px] font-black text-amber-400 text-end uppercase tracking-[0.1em]">
+                הועבר ב-
+                {new Date(
+                  (task.metadata as any).handOverNotes.at,
+                ).toLocaleString("he-IL")}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
             <div className="space-y-8">
               {/* Customer Details */}
@@ -561,6 +719,27 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
                 </div>
               )}
 
+              {/* Chat Section */}
+              <div className="animate-fade-in-up">
+                <button
+                  onClick={() => setShowChat(!showChat)}
+                  className={`w-full py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all ${
+                    showChat
+                      ? "bg-black text-white shadow-xl"
+                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  }`}
+                >
+                  <MessageCircle size={18} />
+                  {showChat ? "Close Garage Chat" : "Open Garage Chat"}
+                </button>
+
+                {showChat && (
+                  <div className="mt-6">
+                    <TaskChat taskId={task.id} />
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.3em] block mb-6">
                   תיאור והערות טכנאי
@@ -576,6 +755,18 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
             </div>
           </div>
         </div>
+      )}
+      {showProposalModal && (
+        <ProposalCreationModal
+          taskId={task.id}
+          onClose={() => setShowProposalModal(false)}
+        />
+      )}
+      {showHandOverModal && (
+        <HandOverModal
+          onClose={() => setShowHandOverModal(false)}
+          onConfirm={confirmHandOver}
+        />
       )}
       {showEditModal && (
         <EditTaskModal
