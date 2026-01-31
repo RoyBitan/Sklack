@@ -7,13 +7,35 @@ import {
   Routes,
   useNavigate,
 } from "react-router-dom";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { AppProvider } from "./contexts/AppContext";
-import { DataProvider } from "./contexts/DataContext";
-import { AuthGuard } from "./components/AuthGuard";
+import { AuthGuard, AuthProvider, useAuth } from "@/features/auth";
+import { AppProvider } from "@/shared/context/AppContext";
+import { DataProvider } from "@/shared/context/DataContext";
+import {
+  NotificationBell,
+  NotificationsProvider,
+  NotificationsView,
+} from "@/features/notifications";
+import { UsersProvider } from "@/features/users";
+import { ChatProvider } from "@/features/chat";
+import { ProposalsProvider } from "@/features/proposals";
+import { VehiclesProvider, VehiclesView } from "@/features/vehicles";
+import {
+  AppointmentsProvider,
+  RequestDetailsView,
+} from "@/features/appointments";
+import { TaskDetailsView, TasksProvider } from "@/features/tasks";
 import PublicOrderStatus from "./components/PublicOrderStatus";
 import { Toaster } from "sonner";
-import ErrorBoundary from "./components/ErrorBoundary";
+import ErrorBoundary, {
+  AppointmentsErrorFallback,
+  DashboardErrorFallback,
+  DetailViewErrorFallback,
+  FeatureErrorBoundary,
+  TasksErrorFallback,
+  VehiclesErrorFallback,
+} from "./components/ErrorBoundary";
+import LoadingSpinner from "@/shared/components/ui/LoadingSpinner";
+import Layout from "@/shared/components/layout/Layout";
 
 // View Components for Routing
 import ManagerDashboard from "./components/ManagerDashboard";
@@ -21,28 +43,55 @@ import TeamDashboard from "./components/TeamDashboard";
 import CustomerDashboard from "./components/CustomerDashboard";
 import SettingsView from "./components/SettingsView";
 import OrganizationView from "./components/OrganizationView";
-import NotificationsView from "./components/NotificationsView";
-import AppointmentsView from "./components/AppointmentsView";
-import VehiclesView from "./components/VehiclesView";
+import AppointmentsView from "@/features/appointments/components/AppointmentsView";
 import GarageView from "./components/GarageView";
-import TaskDetailsView from "./components/TaskDetailsView";
-import RequestDetailsView from "./components/RequestDetailsView";
-import TasksListView from "./components/TasksListView";
+import TasksListView from "@/features/tasks/components/TasksList";
 import { UserRole } from "./types";
 
 const DashboardRouter: React.FC = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
 
   if (!profile) return null;
 
+  // Wrap each dashboard in its own error boundary
+  const handleGoHome = () => navigate("/dashboard");
+
   if (profile.role === UserRole.SUPER_MANAGER) {
-    return <ManagerDashboard />;
+    return (
+      <FeatureErrorBoundary
+        featureName="דשבורד מנהל"
+        fallback={(error, resetError) => (
+          <DashboardErrorFallback error={error} onRetry={resetError} />
+        )}
+      >
+        <ManagerDashboard />
+      </FeatureErrorBoundary>
+    );
   }
   if (profile.role === UserRole.STAFF) {
-    return <TeamDashboard />;
+    return (
+      <FeatureErrorBoundary
+        featureName="דשבורד צוות"
+        fallback={(error, resetError) => (
+          <DashboardErrorFallback error={error} onRetry={resetError} />
+        )}
+      >
+        <TeamDashboard />
+      </FeatureErrorBoundary>
+    );
   }
   if (profile.role === UserRole.CUSTOMER) {
-    return <CustomerDashboard />;
+    return (
+      <FeatureErrorBoundary
+        featureName="דשבורד לקוח"
+        fallback={(error, resetError) => (
+          <DashboardErrorFallback error={error} onRetry={resetError} />
+        )}
+      >
+        <CustomerDashboard />
+      </FeatureErrorBoundary>
+    );
   }
   return null;
 };
@@ -62,8 +111,6 @@ const RoleGate: React.FC<
 
   return <>{children}</>;
 };
-
-import Layout from "./components/Layout";
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -85,7 +132,26 @@ const AppRoutes: React.FC = () => {
     navigator.serviceWorker?.addEventListener("message", handleMessage);
     return () =>
       navigator.serviceWorker?.removeEventListener("message", handleMessage);
-  }, []);
+  }, [navigate]);
+
+  // Helper for detail view error fallback with navigation
+  const DetailViewWithErrorBoundary: React.FC<{
+    children: React.ReactNode;
+    featureName: string;
+  }> = ({ children, featureName }) => (
+    <FeatureErrorBoundary
+      featureName={featureName}
+      fallback={(error, resetError) => (
+        <DetailViewErrorFallback
+          error={error}
+          onRetry={resetError}
+          onGoBack={() => navigate(-1)}
+        />
+      )}
+    >
+      {children}
+    </FeatureErrorBoundary>
+  );
 
   return (
     <Routes>
@@ -105,12 +171,23 @@ const AppRoutes: React.FC = () => {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardRouter />} />
 
-          {/* Admin/Manager Only Routes */}
+          {/* Admin/Manager Only Routes - Each with its own Error Boundary */}
           <Route
             path="/tasks"
             element={
               <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <TasksListView />
+                <FeatureErrorBoundary
+                  featureName="משימות"
+                  fallback={(error, resetError) => (
+                    <TasksErrorFallback
+                      error={error}
+                      onRetry={resetError}
+                      onGoHome={() => navigate("/dashboard")}
+                    />
+                  )}
+                >
+                  <TasksListView />
+                </FeatureErrorBoundary>
               </RoleGate>
             }
           />
@@ -118,7 +195,17 @@ const AppRoutes: React.FC = () => {
             path="/appointments"
             element={
               <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <AppointmentsView />
+                <FeatureErrorBoundary
+                  featureName="תורים"
+                  fallback={(error, resetError) => (
+                    <AppointmentsErrorFallback
+                      error={error}
+                      onRetry={resetError}
+                    />
+                  )}
+                >
+                  <AppointmentsView />
+                </FeatureErrorBoundary>
               </RoleGate>
             }
           />
@@ -126,7 +213,17 @@ const AppRoutes: React.FC = () => {
             path="/vehicles"
             element={
               <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <VehiclesView />
+                <FeatureErrorBoundary
+                  featureName="רכבים"
+                  fallback={(error, resetError) => (
+                    <VehiclesErrorFallback
+                      error={error}
+                      onRetry={resetError}
+                    />
+                  )}
+                >
+                  <VehiclesView />
+                </FeatureErrorBoundary>
               </RoleGate>
             }
           />
@@ -134,7 +231,9 @@ const AppRoutes: React.FC = () => {
             path="/garage"
             element={
               <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <GarageView />
+                <FeatureErrorBoundary featureName="מוסך">
+                  <GarageView />
+                </FeatureErrorBoundary>
               </RoleGate>
             }
           />
@@ -142,19 +241,49 @@ const AppRoutes: React.FC = () => {
             path="/team"
             element={
               <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <OrganizationView />
+                <FeatureErrorBoundary featureName="צוות">
+                  <OrganizationView />
+                </FeatureErrorBoundary>
               </RoleGate>
             }
           />
 
           {/* Common Routes */}
-          <Route path="/settings" element={<SettingsView />} />
-          <Route path="/notifications" element={<NotificationsView />} />
+          <Route
+            path="/settings"
+            element={
+              <FeatureErrorBoundary featureName="הגדרות">
+                <SettingsView />
+              </FeatureErrorBoundary>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <FeatureErrorBoundary featureName="התראות">
+                <NotificationsView />
+              </FeatureErrorBoundary>
+            }
+          />
         </Route>
 
-        {/* Views WITHOUT Layout (Directly inside AuthGuard) */}
-        <Route path="/tasks/:id" element={<TaskDetailsView />} />
-        <Route path="/appointments/:id" element={<RequestDetailsView />} />
+        {/* Views WITHOUT Layout (Directly inside AuthGuard) - with Detail Error Boundaries */}
+        <Route
+          path="/tasks/:id"
+          element={
+            <DetailViewWithErrorBoundary featureName="פרטי משימה">
+              <TaskDetailsView />
+            </DetailViewWithErrorBoundary>
+          }
+        />
+        <Route
+          path="/appointments/:id"
+          element={
+            <DetailViewWithErrorBoundary featureName="פרטי תור">
+              <RequestDetailsView />
+            </DetailViewWithErrorBoundary>
+          }
+        />
       </Route>
 
       {/* Fallback */}
@@ -169,15 +298,29 @@ const App: React.FC = () => {
       <BrowserRouter>
         <AuthProvider>
           <AppProvider>
-            <DataProvider>
-              <AppRoutes />
-              <Toaster
-                position="top-center"
-                expand={true}
-                richColors
-                dir="rtl"
-              />
-            </DataProvider>
+            <NotificationsProvider>
+              <UsersProvider>
+                <ChatProvider>
+                  <ProposalsProvider>
+                    <VehiclesProvider>
+                      <AppointmentsProvider>
+                        <TasksProvider>
+                          <DataProvider>
+                            <AppRoutes />
+                            <Toaster
+                              position="top-center"
+                              expand={true}
+                              richColors
+                              dir="rtl"
+                            />
+                          </DataProvider>
+                        </TasksProvider>
+                      </AppointmentsProvider>
+                    </VehiclesProvider>
+                  </ProposalsProvider>
+                </ChatProvider>
+              </UsersProvider>
+            </NotificationsProvider>
           </AppProvider>
         </AuthProvider>
       </BrowserRouter>

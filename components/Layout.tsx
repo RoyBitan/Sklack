@@ -64,7 +64,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   const NavItem = (
-    { view, icon: Icon, label }: { view: AppView; icon: any; label: string },
+    { view, icon: Icon, label }: {
+      view: AppView;
+      icon: React.ElementType;
+      label: string;
+    },
   ) => {
     const isActive = activeView === view ||
       (view === "TASKS" && activeView === "TASK_DETAIL") ||
@@ -89,7 +93,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Role-based bottom navigation items
   const getBottomNavItems = (): {
     view: AppView;
-    icon: any;
+    icon: React.ElementType;
     label: string;
   }[] => {
     const isManager = profile.role === UserRole.SUPER_MANAGER;

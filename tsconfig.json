@@ -18,10 +18,16 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"],
+      "@/features/*": ["src/features/*"],
+      "@/shared/*": ["src/shared/*"],
+      "@/services/*": ["services/*"],
+      "@/components/*": ["components/*"],
+      "@/contexts/*": ["contexts/*"],
+      "@/utils/*": ["utils/*"],
+      "@/types": ["types.ts"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true

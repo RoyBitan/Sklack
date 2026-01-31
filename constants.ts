@@ -1,29 +1,34 @@
 import { Language } from "./types";
 
 export const SERVICE_TYPES = [
-  'טיפול שנתי',
-  'טסט',
-  'אישור בלמים',
-  'בדיקת בלמים',
-  'בדיקת מנוע',
-  'בדיקת גיר',
-  'רעשים',
-  'טיפול במזגן',
-  'הכנה לטסט',
-  'הכנה לחורף',
-  'מצבר',
-  'נורת תקלה בלוח שעונים',
-  'פחחות וצבע',
-  'אחר (סיבה אחרת)'
+  "טיפול שנתי",
+  "טסט",
+  "אישור בלמים",
+  "בדיקת בלמים",
+  "בדיקת מנוע",
+  "בדיקת גיר",
+  "רעשים",
+  "טיפול במזגן",
+  "הכנה לטסט",
+  "הכנה לחורף",
+  "מצבר",
+  "נורת תקלה בלוח שעונים",
+  "פחחות וצבע",
+  "אחר (סיבה אחרת)",
 ];
 
 export const ISRAELI_HOLIDAYS = [
-  '2024-10-02', '2024-10-03', '2024-10-04',
-  '2024-10-11', '2024-10-12',
-  '2025-04-12', '2025-04-13', '2025-04-14'
+  "2024-10-02",
+  "2024-10-03",
+  "2024-10-04",
+  "2024-10-11",
+  "2024-10-12",
+  "2025-04-12",
+  "2025-04-13",
+  "2025-04-14",
 ];
 
-export const TRANSLATIONS: Record<Language, Record<string, string>> = {
+export const TRANSLATIONS: Record<Language, Partial<Record<string, string>>> = {
   [Language.HEBREW]: {
     appName: "Sklack",
     login: "כניסה",
@@ -48,7 +53,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     reassign: "שייך מחדש",
     urgent: "דחוף",
     critical: "קריטי",
-    normal: "רגיל"
+    normal: "רגיל",
   },
   [Language.ENGLISH]: {
     appName: "Sklack",
@@ -57,6 +62,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     tasks: "Tasks",
     appointments: "Appointments",
     organization: "Org",
-    settings: "Settings"
-  }
-} as any;
+    settings: "Settings",
+  },
+};
