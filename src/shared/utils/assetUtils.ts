@@ -1,4 +1,4 @@
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 
 /**
  * Compresses an image file using the Canvas API.
@@ -88,12 +88,14 @@ export const uploadAsset = async (
       contentType: contentType || "image/jpeg",
       // Real-time progress tracking for Android & iOS compatibility
       onUploadProgress: (progress) => {
-        if (onProgress && progress.total) {
-          const percent = Math.round((progress.loaded / progress.total) * 100);
+        if (onProgress && (progress as any).total) {
+          const percent = Math.round(
+            ((progress as any).loaded / (progress as any).total) * 100,
+          );
           onProgress(percent);
         }
       },
-    });
+    } as any);
 
   if (error) throw error;
 

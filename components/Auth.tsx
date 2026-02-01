@@ -1,1 +1,1 @@
-export { default } from "@/features/auth/components/AuthForm";
+export { default } from "@/src/features/auth/components/AuthForm";

@@ -1,4 +1,4 @@
 export {
   AppointmentsProvider,
   useAppointments,
-} from "@/features/appointments/context/AppointmentsContext";
+} from "@/src/features/appointments/context/AppointmentsContext";

@@ -6,8 +6,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { supabase } from "@/services/api/client";
-import { useAuth } from "@/features/auth";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/src/features/auth";
 import { Notification as AppNotification } from "@/types";
 import { notificationsService } from "../services/notifications.service";
 
@@ -145,10 +145,7 @@ export const NotificationsProvider: React.FC<{ children: React.ReactNode }> = (
         (payload) => {
           const newNotif = payload.new as AppNotification;
           // Frontend guard: Don't show notification if the current user caused it
-          if (
-            newNotif.actor_id === profile.id ||
-            newNotif.metadata?.actor_id === profile.id
-          ) {
+          if (newNotif.actor_id === profile.id) {
             return;
           }
 

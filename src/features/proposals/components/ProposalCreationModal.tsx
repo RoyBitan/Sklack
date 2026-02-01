@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Loader, Mic, Send, Upload, X } from "lucide-react";
 import { useProposals } from "../context/ProposalsContext";
-import { compressImage, uploadAsset } from "@/shared/utils/assetUtils";
+import { compressImage, uploadAsset } from "@/src/shared/utils/assetUtils";
 import { toast } from "sonner";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 
 interface ProposalCreationModalProps {
   taskId: string;

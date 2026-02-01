@@ -1,1 +1,1 @@
-export { AuthGuard } from "@/features/auth";
+export { AuthGuard } from "@/src/features/auth";

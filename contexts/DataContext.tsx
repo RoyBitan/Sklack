@@ -1,1 +1,1 @@
-export { DataProvider, useData } from "@/shared/context/DataContext";
+export { DataProvider, useData } from "@/src/shared/context/DataContext";

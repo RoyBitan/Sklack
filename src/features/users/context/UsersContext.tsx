@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/features/auth";
+import { useAuth } from "@/src/features/auth";
 import { Profile, Vehicle } from "@/types";
 import {
   UpdateOrganizationDTO,

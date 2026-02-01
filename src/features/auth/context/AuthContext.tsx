@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { Profile } from "@/types";
 
 interface AuthContextType {

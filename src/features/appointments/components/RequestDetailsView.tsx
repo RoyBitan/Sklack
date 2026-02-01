@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/features/auth";
+import { useAuth } from "@/src/features/auth";
 import { useData } from "@/contexts/DataContext";
 import { useApp } from "@/contexts/AppContext";
 import { useNavigate, useParams } from "react-router-dom";
@@ -19,7 +19,7 @@ import {
   Phone,
   User,
 } from "lucide-react";
-import { formatLicensePlate } from "@/shared/utils/formatters";
+import { formatLicensePlate } from "@/src/shared/utils/formatters";
 import { toast } from "sonner";
 
 /**

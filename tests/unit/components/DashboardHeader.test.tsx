@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { DashboardHeader } from "@/components/ManagerDashboard/components/DashboardHeader";
+import { DashboardHeader } from "@/src/features/tasks/components/ManagerDashboard/components/DashboardHeader";
 import { mockProfile } from "@/tests/mocks";
 
 describe("DashboardHeader", () => {

@@ -3,9 +3,9 @@
  * Centralizes all notification-related database operations
  */
 
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { Notification as AppNotification, NotificationMetadata } from "@/types";
-import { NotificationCreationError } from "@/shared/utils/errors";
+import { NotificationCreationError } from "@/src/shared/utils/errors";
 
 // DTOs
 export interface CreateNotificationDTO {
@@ -25,7 +25,7 @@ export interface FetchNotificationsOptions {
   limit?: number;
 }
 
-class NotificationsService {
+export class NotificationsService {
   /**
    * Fetch notifications for a user
    */

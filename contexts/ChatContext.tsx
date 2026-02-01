@@ -1,1 +1,1 @@
-export { ChatProvider, useChat } from "@/features/chat/context/ChatContext";
+export { ChatProvider, useChat } from "@/src/features/chat/context/ChatContext";

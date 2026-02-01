@@ -1,7 +1,7 @@
 import React from "react";
 import { Car, ChevronDown, Download, Loader } from "lucide-react";
 import { formatLicensePlate } from "@/utils/formatters";
-import { CreateTaskFormData } from "../../types/task.types";
+import { CreateTaskFormData } from "../../../types/task.types";
 
 interface VehicleInfoSectionProps {
   formData: CreateTaskFormData;

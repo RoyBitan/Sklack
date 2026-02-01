@@ -8,7 +8,7 @@ import {
   TaskProposal,
   TaskStatus,
 } from "@/types";
-import { formatLicensePlate } from "@/shared/utils/formatters";
+import { formatLicensePlate } from "@/src/shared/utils/formatters";
 import {
   AlertCircle,
   Calendar,
@@ -25,8 +25,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useData as useDataContext } from "@/shared/context/DataContext";
-import TaskChat from "@/features/chat/components/TaskChat";
+import { useData as useDataContext } from "@/src/shared/context/DataContext";
+import TaskChat from "@/src/features/chat/components/TaskChat";
 import { MessageCircle } from "lucide-react";
 
 interface CustomerTaskCardProps {
@@ -245,7 +245,7 @@ const CustomerTaskCard: React.FC<CustomerTaskCardProps> = (
               <div className="flex justify-between">
                 <span>תשלום:</span>
                 <span className="font-bold text-gray-800">
-                  {getPaymentMethodLabel(task.metadata.paymentMethod || "")}
+                  {getPaymentMethodLabel(task.metadata.paymentMethod)}
                 </span>
               </div>
             )}

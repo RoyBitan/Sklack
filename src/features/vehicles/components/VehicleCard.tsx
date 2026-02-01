@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useState } from "react";
 import { Vehicle } from "@/types";
 import { ChevronDown, ChevronUp, Sparkles, Trash2 } from "lucide-react";
-import { formatLicensePlate } from "@/shared/utils/formatters";
+import { formatLicensePlate } from "@/src/shared/utils/formatters";
 
 interface VehicleCardProps {
   vehicle: Vehicle;

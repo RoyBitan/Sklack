@@ -1,1 +1,1 @@
-export { default } from "@/features/proposals/components/ProposalCreationModal";
+export { default } from "@/src/features/proposals/components/ProposalCreationModal";

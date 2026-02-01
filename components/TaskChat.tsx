@@ -1,1 +1,1 @@
-export { default } from "@/features/chat/components/TaskChat";
+export { default } from "@/src/features/chat/components/TaskChat";

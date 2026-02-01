@@ -1,1 +1,1 @@
-export { default } from "@/features/proposals/components/AdminProposalInbox";
+export { default } from "@/src/features/proposals/components/AdminProposalInbox";

@@ -28,7 +28,7 @@ export const ISRAELI_HOLIDAYS = [
   "2025-04-14",
 ];
 
-export const TRANSLATIONS: Record<Language, Partial<Record<string, string>>> = {
+export const TRANSLATIONS: Partial<Record<Language, Record<string, string>>> = {
   [Language.HEBREW]: {
     appName: "Sklack",
     login: "כניסה",

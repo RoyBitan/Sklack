@@ -14,13 +14,13 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { ProposalData, ProposalStatus, UserRole } from "@/types";
-import { useAuth } from "@/features/auth";
+import { useAuth } from "@/src/features/auth";
 import { useProposals } from "../context/ProposalsContext";
-import { useNotifications } from "@/features/notifications";
-import LoadingSpinner from "@/shared/components/ui/LoadingSpinner";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { useNotifications } from "@/src/features/notifications";
+import LoadingSpinner from "@/src/shared/components/ui/LoadingSpinner";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 
 interface AdminProposalInboxProps {
   onClose: () => void;

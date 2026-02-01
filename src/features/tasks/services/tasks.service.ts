@@ -9,7 +9,8 @@ import {
   TaskCreationError,
   TaskNotFoundError,
   TaskUpdateError,
-} from "@/services/errors";
+} from "@/src/shared/utils/errors";
+import { withRetry } from "@/src/shared/utils/retry";
 
 // DTOs for type-safe API calls
 export interface CreateTaskDTO {
@@ -50,7 +51,7 @@ export interface FetchTasksOptions {
   cursor?: string; // created_at of last item for pagination
 }
 
-class TasksService {
+export class TasksService {
   private readonly selectQuery = `
     *, 
     organization:organizations(name), 
@@ -65,44 +66,46 @@ class TasksService {
   async fetchTasks(
     options: FetchTasksOptions,
   ): Promise<{ tasks: Task[]; hasMore: boolean }> {
-    const { orgId, userId, userRole, vehicleIds = [], limit = 20, cursor } =
-      options;
+    return withRetry(async () => {
+      const { orgId, userId, userRole, vehicleIds = [], limit = 20, cursor } =
+        options;
 
-    let query = supabase
-      .from("tasks")
-      .select(this.selectQuery)
-      .neq("status", "CANCELLED")
-      .order("created_at", { ascending: false })
-      .limit(limit);
+      let query = supabase
+        .from("tasks")
+        .select(this.selectQuery)
+        .neq("status", "CANCELLED")
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
-    if (cursor) {
-      query = query.lt("created_at", cursor);
-    }
-
-    if (userRole === UserRole.CUSTOMER && userId) {
-      const conditions = [
-        `customer_id.eq.${userId}`,
-        `created_by.eq.${userId}`,
-      ];
-      if (vehicleIds.length > 0) {
-        conditions.push(`vehicle_id.in.(${vehicleIds.join(",")})`);
+      if (cursor) {
+        query = query.lt("created_at", cursor);
       }
-      query = query.or(conditions.join(","));
-    } else if (orgId) {
-      query = query.eq("org_id", orgId);
-    }
 
-    const { data, error } = await query;
+      if (userRole === UserRole.CUSTOMER && userId) {
+        const conditions = [
+          `customer_id.eq.${userId}`,
+          `created_by.eq.${userId}`,
+        ];
+        if (vehicleIds.length > 0) {
+          conditions.push(`vehicle_id.in.(${vehicleIds.join(",")})`);
+        }
+        query = query.or(conditions.join(","));
+      } else if (orgId) {
+        query = query.eq("org_id", orgId);
+      }
 
-    if (error) {
-      console.error("[TasksService] fetchTasks error:", error);
-      throw error;
-    }
+      const { data, error } = await query;
 
-    return {
-      tasks: (data || []) as Task[],
-      hasMore: (data || []).length === limit,
-    };
+      if (error) {
+        console.error("[TasksService] fetchTasks error:", error);
+        throw error;
+      }
+
+      return {
+        tasks: (data || []) as Task[],
+        hasMore: (data || []).length === limit,
+      };
+    });
   }
 
   /**
@@ -123,7 +126,10 @@ class TasksService {
   }
 
   /**
-   * Create a new task
+   * Creates a new task in the system
+   * @param dto - Task creation data
+   * @returns Promise resolving to created task
+   * @throws {TaskCreationError} When task creation fails
    */
   async createTask(dto: CreateTaskDTO): Promise<Task> {
     const { data, error } = await supabase

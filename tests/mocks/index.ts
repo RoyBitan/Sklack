@@ -1,12 +1,20 @@
-import { Priority, Profile, Task, TaskStatus, Vehicle } from "@/types";
+import {
+  MembershipStatus,
+  Priority,
+  Profile,
+  Task,
+  TaskStatus,
+  UserRole,
+  Vehicle,
+} from "@/types";
 
 export const mockProfile: Profile = {
   id: "user-123",
   full_name: "John Doe",
-  email: "john@example.com",
-  role: "SUPER_MANAGER",
+  role: UserRole.SUPER_MANAGER,
   org_id: "org-123",
   phone: "0501234567",
+  membership_status: MembershipStatus.APPROVED,
   created_at: new Date().toISOString(),
 };
 
@@ -17,6 +25,8 @@ export const mockVehicle: Vehicle = {
   model: "Toyota Corolla",
   year: "2020",
   created_at: new Date().toISOString(),
+  owner_id: "user-123",
+  color: "White",
 };
 
 export const mockTask: Task = {
@@ -29,9 +39,16 @@ export const mockTask: Task = {
   priority: Priority.NORMAL,
   created_at: new Date().toISOString(),
   vehicle_id: "veh-123",
+  assigned_to: [],
+  price: 150,
+  allotted_time: 45,
+  started_at: null,
+  completed_at: null,
+  vehicle_year: "2020",
+  immobilizer_code: null,
   metadata: {
+    type: "MANUAL",
     ownerName: "John Doe",
     ownerPhone: "0501234567",
-    type: "MANUAL_ENTRY",
   },
 };

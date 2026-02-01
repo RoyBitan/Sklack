@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/features/auth";
-import { useNotifications } from "@/features/notifications";
+import { useAuth } from "@/src/features/auth";
+import { useNotifications } from "@/src/features/notifications";
 import {
   CreateProposalDTO,
   proposalsService,

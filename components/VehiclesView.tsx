@@ -1,1 +1,1 @@
-export { default } from "@/features/vehicles/components/VehiclesView";
+export { default } from "@/src/features/vehicles/components/VehiclesView";

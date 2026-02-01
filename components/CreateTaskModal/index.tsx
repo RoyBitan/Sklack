@@ -1,7 +1,7 @@
 /**
  * CreateTaskModal - Re-export from new feature location
  *
- * @deprecated This location is deprecated. Import from '@/features/tasks' instead.
+ * @deprecated This location is deprecated. Import from '@/src/features/tasks' instead.
  */
 
-export { default } from "@/features/tasks/components/CreateTaskModal";
+export { default } from "@/src/features/tasks/components/CreateTaskModal";

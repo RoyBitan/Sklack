@@ -1,1 +1,1 @@
-export { default } from "@/features/appointments/components/RequestDetailsView";
+export { default } from "@/src/features/appointments/components/RequestDetailsView";

@@ -1,1 +1,1 @@
-export { default } from "@/features/organizations/components/InviteMemberModal";
+export { default } from "@/src/features/organizations/components/InviteMemberModal";

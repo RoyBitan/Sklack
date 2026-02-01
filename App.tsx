@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+import React, { lazy, Suspense, useEffect } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import {
   BrowserRouter,
   Navigate,
@@ -7,24 +8,19 @@ import {
   Routes,
   useNavigate,
 } from "react-router-dom";
-import { AuthGuard, AuthProvider, useAuth } from "@/features/auth";
-import { AppProvider } from "@/shared/context/AppContext";
-import { DataProvider } from "@/shared/context/DataContext";
+import { AuthGuard, AuthProvider, useAuth } from "@/src/features/auth";
+import { AppProvider } from "@/src/shared/context/AppContext";
+import { DataProvider } from "@/src/shared/context/DataContext";
 import {
   NotificationBell,
   NotificationsProvider,
-  NotificationsView,
-} from "@/features/notifications";
-import { UsersProvider } from "@/features/users";
-import { ChatProvider } from "@/features/chat";
-import { ProposalsProvider } from "@/features/proposals";
-import { VehiclesProvider, VehiclesView } from "@/features/vehicles";
-import {
-  AppointmentsProvider,
-  RequestDetailsView,
-} from "@/features/appointments";
-import { TaskDetailsView, TasksProvider } from "@/features/tasks";
-import PublicOrderStatus from "./components/PublicOrderStatus";
+} from "@/src/features/notifications";
+import { UsersProvider } from "@/src/features/users";
+import { ChatProvider } from "@/src/features/chat";
+import { ProposalsProvider } from "@/src/features/proposals";
+import { VehiclesProvider } from "@/src/features/vehicles";
+import { AppointmentsProvider } from "@/src/features/appointments";
+import { TasksProvider } from "@/src/features/tasks";
 import { Toaster } from "sonner";
 import ErrorBoundary, {
   AppointmentsErrorFallback,
@@ -34,18 +30,75 @@ import ErrorBoundary, {
   TasksErrorFallback,
   VehiclesErrorFallback,
 } from "./components/ErrorBoundary";
-import LoadingSpinner from "@/shared/components/ui/LoadingSpinner";
-import Layout from "@/shared/components/layout/Layout";
+import LoadingSpinner from "@/src/shared/components/ui/LoadingSpinner";
+import Layout from "@/src/shared/components/layout/Layout";
 
-// View Components for Routing
-import ManagerDashboard from "./components/ManagerDashboard";
-import TeamDashboard from "./components/TeamDashboard";
-import CustomerDashboard from "./components/CustomerDashboard";
-import SettingsView from "./components/SettingsView";
-import OrganizationView from "./components/OrganizationView";
-import AppointmentsView from "@/features/appointments/components/AppointmentsView";
-import GarageView from "./components/GarageView";
-import TasksListView from "@/features/tasks/components/TasksList";
+// Lazy Load Views
+const NotificationsView = lazy(() =>
+  import("@/src/features/notifications").then((module) => ({
+    default: module.NotificationsView,
+  }))
+);
+const SettingsView = lazy(() =>
+  import("@/src/features/users").then((module) => ({
+    default: module.SettingsView,
+  }))
+);
+const VehiclesView = lazy(() =>
+  import("@/src/features/vehicles").then((module) => ({
+    default: module.VehiclesView,
+  }))
+);
+const AppointmentsView = lazy(() =>
+  import("@/src/features/appointments").then((module) => ({
+    default: module.AppointmentsView,
+  }))
+);
+const RequestDetailsView = lazy(() =>
+  import("@/src/features/appointments").then((module) => ({
+    default: module.RequestDetailsView,
+  }))
+);
+const CustomerDashboard = lazy(() =>
+  import("@/src/features/tasks").then((module) => ({
+    default: module.CustomerDashboard,
+  }))
+);
+const ManagerDashboard = lazy(() =>
+  import("@/src/features/tasks").then((module) => ({
+    default: module.ManagerDashboard,
+  }))
+);
+const PublicOrderStatus = lazy(() =>
+  import("@/src/features/tasks").then((module) => ({
+    default: module.PublicOrderStatus,
+  }))
+);
+const TaskDetailsView = lazy(() =>
+  import("@/src/features/tasks").then((module) => ({
+    default: module.TaskDetailsView,
+  }))
+);
+const TasksList = lazy(() =>
+  import("@/src/features/tasks").then((module) => ({
+    default: module.TasksList,
+  }))
+);
+const TeamDashboard = lazy(() =>
+  import("@/src/features/tasks").then((module) => ({
+    default: module.TeamDashboard,
+  }))
+);
+const GarageView = lazy(() =>
+  import("@/src/features/organizations").then((module) => ({
+    default: module.GarageView,
+  }))
+);
+const OrganizationView = lazy(() =>
+  import("@/src/features/organizations").then((module) => ({
+    default: module.OrganizationView,
+  }))
+);
 import { UserRole } from "./types";
 
 const DashboardRouter: React.FC = () => {
@@ -154,141 +207,143 @@ const AppRoutes: React.FC = () => {
   );
 
   return (
-    <Routes>
-      {/* Public Route */}
-      <Route path="/status/:taskId" element={<PublicOrderStatus />} />
+    <Suspense fallback={<LoadingSpinner fullScreen />}>
+      <Routes>
+        {/* Public Route */}
+        <Route path="/status/:taskId" element={<PublicOrderStatus />} />
 
-      {/* Authenticated Routes wrapped in AuthGuard */}
-      <Route element={<AuthGuard />}>
-        {/* Views WITH Layout */}
-        <Route
-          element={
-            <Layout>
-              <Outlet />
-            </Layout>
-          }
-        >
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardRouter />} />
+        {/* Authenticated Routes wrapped in AuthGuard */}
+        <Route element={<AuthGuard />}>
+          {/* Views WITH Layout */}
+          <Route
+            element={
+              <Layout>
+                <Outlet />
+              </Layout>
+            }
+          >
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardRouter />} />
 
-          {/* Admin/Manager Only Routes - Each with its own Error Boundary */}
-          <Route
-            path="/tasks"
-            element={
-              <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <FeatureErrorBoundary
-                  featureName="משימות"
-                  fallback={(error, resetError) => (
-                    <TasksErrorFallback
-                      error={error}
-                      onRetry={resetError}
-                      onGoHome={() => navigate("/dashboard")}
-                    />
-                  )}
-                >
-                  <TasksListView />
-                </FeatureErrorBoundary>
-              </RoleGate>
-            }
-          />
-          <Route
-            path="/appointments"
-            element={
-              <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <FeatureErrorBoundary
-                  featureName="תורים"
-                  fallback={(error, resetError) => (
-                    <AppointmentsErrorFallback
-                      error={error}
-                      onRetry={resetError}
-                    />
-                  )}
-                >
-                  <AppointmentsView />
-                </FeatureErrorBoundary>
-              </RoleGate>
-            }
-          />
-          <Route
-            path="/vehicles"
-            element={
-              <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <FeatureErrorBoundary
-                  featureName="רכבים"
-                  fallback={(error, resetError) => (
-                    <VehiclesErrorFallback
-                      error={error}
-                      onRetry={resetError}
-                    />
-                  )}
-                >
-                  <VehiclesView />
-                </FeatureErrorBoundary>
-              </RoleGate>
-            }
-          />
-          <Route
-            path="/garage"
-            element={
-              <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <FeatureErrorBoundary featureName="מוסך">
-                  <GarageView />
-                </FeatureErrorBoundary>
-              </RoleGate>
-            }
-          />
-          <Route
-            path="/team"
-            element={
-              <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
-                <FeatureErrorBoundary featureName="צוות">
-                  <OrganizationView />
-                </FeatureErrorBoundary>
-              </RoleGate>
-            }
-          />
+            {/* Admin/Manager Only Routes - Each with its own Error Boundary */}
+            <Route
+              path="/tasks"
+              element={
+                <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
+                  <FeatureErrorBoundary
+                    featureName="משימות"
+                    fallback={(error, resetError) => (
+                      <TasksErrorFallback
+                        error={error}
+                        onRetry={resetError}
+                        onGoHome={() => navigate("/dashboard")}
+                      />
+                    )}
+                  >
+                    <TasksList />
+                  </FeatureErrorBoundary>
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/appointments"
+              element={
+                <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
+                  <FeatureErrorBoundary
+                    featureName="תורים"
+                    fallback={(error, resetError) => (
+                      <AppointmentsErrorFallback
+                        error={error}
+                        onRetry={resetError}
+                      />
+                    )}
+                  >
+                    <AppointmentsView />
+                  </FeatureErrorBoundary>
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/vehicles"
+              element={
+                <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
+                  <FeatureErrorBoundary
+                    featureName="רכבים"
+                    fallback={(error, resetError) => (
+                      <VehiclesErrorFallback
+                        error={error}
+                        onRetry={resetError}
+                      />
+                    )}
+                  >
+                    <VehiclesView />
+                  </FeatureErrorBoundary>
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/garage"
+              element={
+                <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
+                  <FeatureErrorBoundary featureName="מוסך">
+                    <GarageView />
+                  </FeatureErrorBoundary>
+                </RoleGate>
+              }
+            />
+            <Route
+              path="/team"
+              element={
+                <RoleGate allowedRoles={[UserRole.SUPER_MANAGER]}>
+                  <FeatureErrorBoundary featureName="צוות">
+                    <OrganizationView />
+                  </FeatureErrorBoundary>
+                </RoleGate>
+              }
+            />
 
-          {/* Common Routes */}
+            {/* Common Routes */}
+            <Route
+              path="/settings"
+              element={
+                <FeatureErrorBoundary featureName="הגדרות">
+                  <SettingsView />
+                </FeatureErrorBoundary>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <FeatureErrorBoundary featureName="התראות">
+                  <NotificationsView />
+                </FeatureErrorBoundary>
+              }
+            />
+          </Route>
+
+          {/* Views WITHOUT Layout (Directly inside AuthGuard) - with Detail Error Boundaries */}
           <Route
-            path="/settings"
+            path="/tasks/:id"
             element={
-              <FeatureErrorBoundary featureName="הגדרות">
-                <SettingsView />
-              </FeatureErrorBoundary>
+              <DetailViewWithErrorBoundary featureName="פרטי משימה">
+                <TaskDetailsView />
+              </DetailViewWithErrorBoundary>
             }
           />
           <Route
-            path="/notifications"
+            path="/appointments/:id"
             element={
-              <FeatureErrorBoundary featureName="התראות">
-                <NotificationsView />
-              </FeatureErrorBoundary>
+              <DetailViewWithErrorBoundary featureName="פרטי תור">
+                <RequestDetailsView />
+              </DetailViewWithErrorBoundary>
             }
           />
         </Route>
 
-        {/* Views WITHOUT Layout (Directly inside AuthGuard) - with Detail Error Boundaries */}
-        <Route
-          path="/tasks/:id"
-          element={
-            <DetailViewWithErrorBoundary featureName="פרטי משימה">
-              <TaskDetailsView />
-            </DetailViewWithErrorBoundary>
-          }
-        />
-        <Route
-          path="/appointments/:id"
-          element={
-            <DetailViewWithErrorBoundary featureName="פרטי תור">
-              <RequestDetailsView />
-            </DetailViewWithErrorBoundary>
-          }
-        />
-      </Route>
-
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </Suspense>
   );
 };
 
@@ -313,6 +368,7 @@ const App: React.FC = () => {
                               richColors
                               dir="rtl"
                             />
+                            <Analytics />
                           </DataProvider>
                         </TasksProvider>
                       </AppointmentsProvider>

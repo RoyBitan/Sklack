@@ -3,7 +3,7 @@
  * Centralizes all appointment-related database operations
  */
 
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 
 import {
   Appointment,
@@ -15,7 +15,7 @@ import {
 import {
   AppointmentCreationError,
   AppointmentNotFoundError,
-} from "@/shared/utils/errors";
+} from "@/src/shared/utils/errors";
 
 // DTOs
 export interface CreateAppointmentDTO {
@@ -54,7 +54,7 @@ export interface FetchAppointmentsOptions {
   limit?: number;
 }
 
-class AppointmentsService {
+export class AppointmentsService {
   private readonly selectQuery = `*, customer:profiles(*), vehicle:vehicles(*)`;
 
   /**

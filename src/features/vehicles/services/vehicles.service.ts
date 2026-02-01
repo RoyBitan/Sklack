@@ -3,12 +3,13 @@
  * Centralizes all vehicle-related database operations
  */
 
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { UserRole, Vehicle } from "@/types";
 import {
   VehicleCreationError,
   VehicleNotFoundError,
-} from "@/shared/utils/errors";
+} from "@/src/shared/utils/errors";
+import { withRetry } from "@/src/shared/utils/retry";
 
 // DTOs
 export interface CreateVehicleDTO {
@@ -46,32 +47,34 @@ export interface FetchVehiclesOptions {
   userRole?: UserRole;
 }
 
-class VehiclesService {
+export class VehiclesService {
   /**
    * Fetch vehicles based on user context
    */
   async fetchVehicles(options: FetchVehiclesOptions): Promise<Vehicle[]> {
-    const { orgId, ownerId, userRole } = options;
+    return withRetry(async () => {
+      const { orgId, ownerId, userRole } = options;
 
-    let query = supabase
-      .from("vehicles")
-      .select("*, owner:profiles(full_name)")
-      .order("created_at", { ascending: false });
+      let query = supabase
+        .from("vehicles")
+        .select("*, owner:profiles(full_name)")
+        .order("created_at", { ascending: false });
 
-    if (userRole === UserRole.CUSTOMER && ownerId) {
-      query = query.eq("owner_id", ownerId);
-    } else if (orgId) {
-      query = query.eq("org_id", orgId);
-    }
+      if (userRole === UserRole.CUSTOMER && ownerId) {
+        query = query.eq("owner_id", ownerId);
+      } else if (orgId) {
+        query = query.eq("org_id", orgId);
+      }
 
-    const { data, error } = await query;
+      const { data, error } = await query;
 
-    if (error) {
-      console.error("[VehiclesService] fetchVehicles error:", error);
-      throw error;
-    }
+      if (error) {
+        console.error("[VehiclesService] fetchVehicles error:", error);
+        throw error;
+      }
 
-    return (data || []) as Vehicle[];
+      return (data || []) as Vehicle[];
+    });
   }
 
   /**

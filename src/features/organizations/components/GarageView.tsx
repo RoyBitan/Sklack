@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "@/features/auth";
-import { useData } from "@/shared/context/DataContext";
-import { supabase } from "@/services/api/client";
+import { useAuth } from "@/src/features/auth";
+import { useData } from "@/src/shared/context/DataContext";
+import { supabase } from "@/lib/supabase";
 import {
   Car,
   Check,
@@ -16,16 +16,16 @@ import {
   UserCircle,
   Users,
 } from "lucide-react";
-import { formatLicensePlate } from "@/shared/utils/formatters";
-import AddVehicleModal from "@/features/vehicles/components/AddVehicleModal";
+import { formatLicensePlate } from "@/src/shared/utils/formatters";
+import AddVehicleModal from "@/src/features/vehicles/components/AddVehicleModal";
 import InviteMemberModal from "./InviteMemberModal";
 import EditGarageCodeModal from "./EditGarageCodeModal";
-import LoadingSpinner from "@/shared/components/ui/LoadingSpinner";
+import LoadingSpinner from "@/src/shared/components/ui/LoadingSpinner";
 import { MembershipStatus, Profile, UserRole, Vehicle } from "@/types";
 import { toast } from "sonner";
 import { useDebounce } from "use-debounce";
-import { formatPhoneDisplay } from "@/shared/utils/phoneUtils";
-import { playClickSound, scrollToTop } from "@/shared/utils/uiUtils";
+import { formatPhoneDisplay } from "@/src/shared/utils/phoneUtils";
+import { playClickSound, scrollToTop } from "@/src/shared/utils/uiUtils";
 
 type GarageTab = "VEHICLES" | "TEAM" | "CUSTOMERS";
 

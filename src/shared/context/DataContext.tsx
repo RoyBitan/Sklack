@@ -12,13 +12,13 @@ import {
 } from "@/types";
 
 // Import Hooks from Features
-import { useNotifications } from "@/features/notifications";
-import { useTasks } from "@/features/tasks";
-import { useVehicles } from "@/features/vehicles";
-import { useAppointments } from "@/features/appointments";
-import { useProposals } from "@/features/proposals";
-import { useUsers } from "@/features/users";
-import { useChat } from "@/features/chat";
+import { useNotifications } from "@/src/features/notifications";
+import { useTasks } from "@/src/features/tasks";
+import { useVehicles } from "@/src/features/vehicles";
+import { useAppointments } from "@/src/features/appointments";
+import { useProposals } from "@/src/features/proposals";
+import { useUsers } from "@/src/features/users";
+import { useChat } from "@/src/features/chat";
 
 // Define Interface (Must match existing usage)
 interface DataContextType {

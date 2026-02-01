@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "@/features/auth";
-import { supabase } from "@/services/api/client";
+import { useAuth } from "@/src/features/auth";
+import { supabase } from "@/lib/supabase";
 import { Vehicle } from "@/types";
 import { Car, Plus, Search, User as UserIcon } from "lucide-react";
-import { formatLicensePlate } from "@/shared/utils/formatters";
+import { formatLicensePlate } from "@/src/shared/utils/formatters";
 import AddVehicleModal from "./AddVehicleModal";
 import { useDebounce } from "use-debounce";
 

@@ -116,23 +116,31 @@ const TaskCardContent: React.FC = () => {
  * Main TaskCard component
  * Wraps content in TaskCardProvider for context access
  */
-const TaskCard: React.FC<TaskCardProps> & {
-  // Compound component static properties
-  Provider: typeof TaskCardProvider;
-  Header: typeof TaskCardHeader;
-  OverlayActions: typeof TaskCardOverlayActions;
-  ApprovalActions: typeof TaskCardApprovalActions;
-  MainActions: typeof TaskCardMainActions;
-  StaffInfo: typeof TaskCardStaffInfo;
-  Footer: typeof TaskCardFooter;
-  Expanded: typeof TaskCardExpanded;
-} = ({ task }) => {
+/**
+ * Main TaskCard component
+ * Wraps content in TaskCardProvider for context access
+ */
+const TaskCardBase: React.FC<TaskCardProps> = ({ task }) => {
   return (
     <TaskCardProvider task={task}>
       <TaskCardContent />
     </TaskCardProvider>
   );
 };
+
+const TaskCard = React.memo(TaskCardBase) as
+  & React.NamedExoticComponent<TaskCardProps>
+  & {
+    // Compound component static properties
+    Provider: typeof TaskCardProvider;
+    Header: typeof TaskCardHeader;
+    OverlayActions: typeof TaskCardOverlayActions;
+    ApprovalActions: typeof TaskCardApprovalActions;
+    MainActions: typeof TaskCardMainActions;
+    StaffInfo: typeof TaskCardStaffInfo;
+    Footer: typeof TaskCardFooter;
+    Expanded: typeof TaskCardExpanded;
+  };
 
 // Attach sub-components for compound pattern usage
 TaskCard.Provider = TaskCardProvider;

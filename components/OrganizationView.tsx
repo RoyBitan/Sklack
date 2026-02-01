@@ -1,1 +1,1 @@
-export { default } from "@/features/organizations/components/OrganizationView";
+export { default } from "@/src/features/organizations/components/OrganizationView";

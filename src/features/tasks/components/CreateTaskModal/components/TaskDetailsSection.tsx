@@ -1,6 +1,6 @@
 import React from "react";
 import { Check, ChevronDown, DollarSign } from "lucide-react";
-import { CreateTaskFormData } from "../../types/task.types";
+import { CreateTaskFormData } from "../../../types/task.types";
 
 interface TaskDetailsSectionProps {
   formData: CreateTaskFormData;

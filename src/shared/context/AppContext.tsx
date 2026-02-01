@@ -7,9 +7,9 @@ import React, {
   useState,
 } from "react";
 import { AppView, Language, Profile } from "@/types";
-import { TRANSLATIONS } from "@/shared/constants";
-import { useAuth } from "@/features/auth";
-import { supabase } from "@/services/api/client";
+import { TRANSLATIONS } from "@/src/shared/constants";
+import { useAuth } from "@/src/features/auth";
+import { supabase } from "@/lib/supabase";
 import { useLocation, useNavigate } from "react-router-dom";
 
 interface AppContextType {

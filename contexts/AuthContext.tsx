@@ -1,1 +1,1 @@
-export { AuthProvider, useAuth } from "@/features/auth/context/AuthContext";
+export { AuthProvider, useAuth } from "@/src/features/auth/context/AuthContext";

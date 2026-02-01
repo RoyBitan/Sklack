@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/features/auth";
-import { useData } from "@/shared/context/DataContext";
+import { useAuth } from "@/src/features/auth";
+import { useData } from "@/src/shared/context/DataContext";
 import { TaskMessage, UserRole } from "@/types";
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { Lock, MessageCircle, Send, Sparkles, User } from "lucide-react";
-import { playClickSound } from "@/shared/utils/uiUtils";
-import { useSubscription } from "@/shared/hooks/useSubscription";
+import { playClickSound } from "@/src/shared/utils/uiUtils";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface TaskChatProps {
   taskId: string;

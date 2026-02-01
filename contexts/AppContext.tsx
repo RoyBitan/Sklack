@@ -1,1 +1,1 @@
-export { AppProvider, useApp } from "@/shared/context/AppContext";
+export { AppProvider, useApp } from "@/src/shared/context/AppContext";

@@ -1,7 +1,7 @@
 /**
  * Tasks Context - Re-export from new feature location
  *
- * @deprecated This location is deprecated. Import from '@/features/tasks' instead.
+ * @deprecated This location is deprecated. Import from '@/src/features/tasks' instead.
  */
 
-export * from "@/features/tasks/context/TasksContext";
+export * from "@/src/features/tasks/context/TasksContext";

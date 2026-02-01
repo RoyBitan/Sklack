@@ -1,4 +1,4 @@
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { Appointment } from "@/types";
 
 /**

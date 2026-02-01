@@ -1,1 +1,1 @@
-export { default } from "@/features/tasks/components/CustomerTaskCard";
+export { default } from "@/src/features/tasks/components/CustomerTaskCard";

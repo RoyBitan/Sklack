@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { sanitizeForSearch } from "@/shared/utils/formatters";
+import { sanitizeForSearch } from "@/src/shared/utils/formatters";
 import {
   AlertCircle,
   ArrowLeft,
@@ -18,11 +18,11 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { normalizePhone } from "@/shared/utils/phoneUtils";
-import { supabase } from "@/services/api/client";
-import SklackLogo from "@/shared/components/ui/SklackLogo";
+import { normalizePhone } from "@/src/shared/utils/phoneUtils";
+import { supabase } from "@/lib/supabase";
+import SklackLogo from "@/src/shared/components/ui/SklackLogo";
 import { UserRole } from "@/types";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 
 const AuthForm: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);

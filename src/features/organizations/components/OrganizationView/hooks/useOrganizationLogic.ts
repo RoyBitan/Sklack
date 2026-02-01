@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/features/auth";
-import { useData } from "@/shared/context/DataContext";
-import { supabase } from "@/services/api/client";
+import { useAuth } from "@/src/features/auth";
+import { useData } from "@/src/shared/context/DataContext";
+import { supabase } from "@/lib/supabase";
 import { Invitation, MembershipStatus, Profile, UserRole } from "@/types";
-import { normalizePhone } from "@/shared/utils/phoneUtils";
-import { sanitize } from "@/shared/utils/formatters";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { normalizePhone } from "@/src/shared/utils/phoneUtils";
+import { sanitize } from "@/src/shared/utils/formatters";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 
 interface UseOrganizationLogicProps {
   onboarding?: boolean;

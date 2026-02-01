@@ -7,8 +7,8 @@ import React, {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/services/api/client";
-import { useAuth } from "@/features/auth";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/src/features/auth";
 import { UserRole, Vehicle } from "@/types";
 import {
   CreateVehicleDTO,

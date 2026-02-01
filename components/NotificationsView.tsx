@@ -1,1 +1,1 @@
-export { default } from "@/features/notifications/components/NotificationsView";
+export { default } from "@/src/features/notifications/components/NotificationsView";

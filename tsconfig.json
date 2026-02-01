@@ -31,5 +31,6 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["node_modules", "supabase/functions", "dist"]
 }

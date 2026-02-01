@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./src/styles/index.css";
 import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
+import "./src/lib/sentry"; // Initialize Sentry
+import { GlobalErrorBoundary } from "./src/shared/components/ErrorBoundary/GlobalErrorBoundary";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -12,7 +14,9 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <GlobalErrorBoundary>
+      <App />
+    </GlobalErrorBoundary>
   </React.StrictMode>,
 );
 

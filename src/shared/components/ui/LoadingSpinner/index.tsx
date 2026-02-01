@@ -1,16 +1,23 @@
 import React from "react";
 import SklackLogo from "../SklackLogo";
+import { cn } from "@/src/shared/utils/cn";
 
 interface LoadingSpinnerProps {
   message?: string;
   fullScreen?: boolean;
+  className?: string;
 }
 
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = (
-  { message = "טוען נתונים...", fullScreen = false },
+  { message = "טוען נתונים...", fullScreen = false, className },
 ) => {
   const content = (
-    <div className="flex flex-col items-center justify-center p-12">
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center p-12",
+        className,
+      )}
+    >
       <div
         className={`
                 relative w-28 h-28 flex items-center justify-center 

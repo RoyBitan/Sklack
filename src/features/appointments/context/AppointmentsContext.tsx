@@ -7,9 +7,9 @@ import React, {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/services/api/client";
-import { useAuth } from "@/features/auth";
-import { useNotifications } from "@/features/notifications";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/src/features/auth";
+import { useNotifications } from "@/src/features/notifications";
 import {
   Appointment,
   AppointmentStatus,
@@ -20,7 +20,7 @@ import {
   appointmentsService,
   CreateAppointmentDTO,
 } from "../services/appointments.service";
-import { vehiclesService } from "@/features/vehicles";
+import { vehiclesService } from "@/src/features/vehicles";
 
 interface AppointmentsContextType {
   appointments: Appointment[];

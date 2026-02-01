@@ -16,7 +16,7 @@ import {
   Wrench,
 } from "lucide-react";
 import SklackLogo from "../../ui/SklackLogo";
-import NotificationBell from "@/components/NotificationBell";
+import { NotificationBell } from "@/src/features/notifications";
 import { useData } from "@/contexts/DataContext";
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { AlertCircle, Check, Edit2, X } from "lucide-react";
-import { supabase } from "@/services/api/client";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { supabase } from "@/lib/supabase";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 import { useEffect, useRef } from "react";
 
 interface EditGarageCodeModalProps {

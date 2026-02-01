@@ -5,7 +5,7 @@
  * Import from here for clean, feature-based imports.
  *
  * @example
- * import { TaskCard, useTasks, tasksService } from '@/features/tasks';
+ * import { TaskCard, useTasks, tasksService } from '@/src/features/tasks';
  */
 
 // Components
@@ -14,8 +14,13 @@ export { default as CreateTaskModal } from "./components/CreateTaskModal";
 export { default as EditTaskModal } from "./components/EditTaskModal";
 export { default as TasksList } from "./components/TasksList";
 export { default as TaskDetails } from "./components/TaskDetails";
+export { default as TaskDetailsView } from "./components/TaskDetails";
 export { default as HandOverModal } from "./components/HandOverModal";
 export { default as CustomerTaskCard } from "./components/CustomerTaskCard";
+export { default as ManagerDashboard } from "./components/ManagerDashboard";
+export { default as TeamDashboard } from "./components/TeamDashboard";
+export { default as CustomerDashboard } from "./components/CustomerDashboard";
+export { default as PublicOrderStatus } from "./components/PublicOrderStatus";
 
 // Context
 export { TasksProvider, useTasks } from "./context/TasksContext";

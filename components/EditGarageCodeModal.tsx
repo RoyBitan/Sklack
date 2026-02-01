@@ -1,1 +1,1 @@
-export { default } from "@/features/organizations/components/EditGarageCodeModal";
+export { default } from "@/src/features/organizations/components/EditGarageCodeModal";

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
-import { useAuth } from "@/features/auth";
+import { useAuth } from "@/src/features/auth";
 import { useApp } from "@/contexts/AppContext";
 import { useNotifications } from "../context/NotificationsContext";
 import { AppView } from "@/types";

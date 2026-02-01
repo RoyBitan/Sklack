@@ -2,7 +2,7 @@ import React from "react";
 import { AlertCircle, Car, Check, Loader, RefreshCcw } from "lucide-react";
 import { formatPhoneNumberInput } from "@/utils/phoneUtils";
 import { formatLicensePlate } from "@/utils/formatters";
-import { CreateTaskFormData } from "../../types/task.types";
+import { CreateTaskFormData } from "../../../types/task.types";
 
 interface CustomerInfoSectionProps {
   formData: CreateTaskFormData;

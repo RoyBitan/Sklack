@@ -1,1 +1,1 @@
-export { UsersProvider, useUsers } from "@/features/users/context/UsersContext";
+export { UsersProvider, useUsers } from "@/src/features/users/context/UsersContext";

@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { MessageCircle, Phone, Send, X } from "lucide-react";
-import { useAuth } from "@/features/auth";
-import { supabase } from "@/services/api/client";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { useAuth } from "@/src/features/auth";
+import { supabase } from "@/lib/supabase";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 import { useEffect, useRef } from "react";
 
 interface InviteMemberModalProps {

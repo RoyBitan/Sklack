@@ -3,7 +3,7 @@
  * Centralizes all user/profile-related database operations
  */
 
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import {
   MembershipStatus,
   NotificationSettings,
@@ -13,7 +13,8 @@ import {
   UserRole,
   Vehicle,
 } from "@/types";
-import { UserNotFoundError } from "@/shared/utils/errors";
+import { UserNotFoundError } from "@/src/shared/utils/errors";
+import { withRetry } from "@/src/shared/utils/retry";
 
 // DTOs
 export interface UpdateProfileDTO {
@@ -35,22 +36,24 @@ export interface UpdateOrganizationDTO {
   settings?: OrganizationSettings;
 }
 
-class UsersService {
+export class UsersService {
   /**
    * Get user profile by ID
    */
   async getProfile(userId: string): Promise<Profile> {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*, organization:organizations(*)")
-      .eq("id", userId)
-      .single();
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*, organization:organizations(*)")
+        .eq("id", userId)
+        .single();
 
-    if (error || !data) {
-      throw new UserNotFoundError(userId);
-    }
+      if (error || !data) {
+        throw new UserNotFoundError(userId);
+      }
 
-    return data as Profile;
+      return data as Profile;
+    });
   }
 
   /**
@@ -78,19 +81,21 @@ class UsersService {
    * Fetch team members for an organization
    */
   async fetchTeamMembers(orgId: string): Promise<Profile[]> {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("org_id", orgId)
-      .in("role", [UserRole.STAFF, UserRole.SUPER_MANAGER])
-      .eq("membership_status", MembershipStatus.APPROVED);
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("org_id", orgId)
+        .in("role", [UserRole.STAFF, UserRole.SUPER_MANAGER])
+        .eq("membership_status", MembershipStatus.APPROVED);
 
-    if (error) {
-      console.error("[UsersService] fetchTeamMembers error:", error);
-      throw error;
-    }
+      if (error) {
+        console.error("[UsersService] fetchTeamMembers error:", error);
+        throw error;
+      }
 
-    return (data || []) as Profile[];
+      return (data || []) as Profile[];
+    });
   }
 
   /**

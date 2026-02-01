@@ -1,4 +1,4 @@
 export {
   ProposalsProvider,
   useProposals,
-} from "@/features/proposals/context/ProposalsContext";
+} from "@/src/features/proposals/context/ProposalsContext";

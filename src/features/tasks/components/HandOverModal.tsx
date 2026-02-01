@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardList, Loader, Save, X } from "lucide-react";
 import { toast } from "sonner";
-import { scrollToFormStart } from "@/shared/utils/uiUtils";
+import { scrollToFormStart } from "@/src/shared/utils/uiUtils";
 import { useEffect, useRef } from "react";
 
 interface HandOverModalProps {

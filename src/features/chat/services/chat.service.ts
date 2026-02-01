@@ -3,9 +3,9 @@
  * Centralizes all task message/chat-related database operations
  */
 
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { TaskMessage } from "@/types";
-import { ChatMessageError } from "@/shared/utils/errors";
+import { ChatMessageError } from "@/src/shared/utils/errors";
 
 // DTOs
 export interface SendMessageDTO {

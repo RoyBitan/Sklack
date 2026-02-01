@@ -1,0 +1,25 @@
+﻿src/features/appointments/components/AppointmentsView/components/CalendarGrid.tsx(125,49): error TS2339: Property 'customer_name' does not exist on type 'AppointmentMetadata'.
+src/features/appointments/components/AppointmentsView/components/CalendarGrid.tsx(133,49): error TS2551: Property 'vehicle_plate' does not exist on type 'AppointmentMetadata'. Did you mean 'vehiclePlate'?
+src/features/appointments/components/AppointmentsView/index.tsx(92,48): error TS2345: Argument of type '`/tasks/${string}`' is not assignable to parameter of type 'AppView'.
+src/features/notifications/context/NotificationsContext.tsx(150,32): error TS2339: Property 'actor_id' does not exist on type 'NotificationMetadata'.
+src/features/tasks/components/CreateTaskModal/components/CustomerInfoSection.tsx(5,36): error TS2307: Cannot find module '../../types/task.types' or its corresponding type declarations.
+src/features/tasks/components/CreateTaskModal/components/TaskDetailsSection.tsx(3,36): error TS2307: Cannot find module '../../types/task.types' or its corresponding type declarations.
+src/features/tasks/components/CreateTaskModal/components/VehicleInfoSection.tsx(4,36): error TS2307: Cannot find module '../../types/task.types' or its corresponding type declarations.
+src/features/tasks/components/CreateTaskModal/index.tsx(63,15): error TS2322: Type '<K extends keyof CreateTaskFormData>(field: K, value: CreateTaskFormData[K]) => void' is not assignable to type '<K extends keyof CreateTaskFormData>(field: K, value: CreateTaskFormData) => void'.
+  Types of parameters 'field' and 'field' are incompatible.
+    Type 'K' is not assignable to type 'keyof CreateTaskFormData'.
+      Type 'string | number | symbol' is not assignable to type 'keyof CreateTaskFormData'.
+        Type 'string' is not assignable to type 'keyof CreateTaskFormData'.
+src/features/tasks/components/CreateTaskModal/index.tsx(76,15): error TS2322: Type '<K extends keyof CreateTaskFormData>(field: K, value: CreateTaskFormData[K]) => void' is not assignable to type '<K extends keyof CreateTaskFormData>(field: K, value: CreateTaskFormData) => void'.
+  Types of parameters 'field' and 'field' are incompatible.
+    Type 'K' is not assignable to type 'keyof CreateTaskFormData'.
+      Type 'string | number | symbol' is not assignable to type 'keyof CreateTaskFormData'.
+        Type 'string' is not assignable to type 'keyof CreateTaskFormData'.
+src/features/tasks/components/CreateTaskModal/index.tsx(86,15): error TS2322: Type '<K extends keyof CreateTaskFormData>(field: K, value: CreateTaskFormData[K]) => void' is not assignable to type '<K extends keyof CreateTaskFormData>(field: K, value: CreateTaskFormData) => void'.
+  Types of parameters 'field' and 'field' are incompatible.
+    Type 'K' is not assignable to type 'keyof CreateTaskFormData'.
+      Type 'string | number | symbol' is not assignable to type 'keyof CreateTaskFormData'.
+        Type 'string' is not assignable to type 'keyof CreateTaskFormData'.
+src/features/tasks/components/CustomerDashboard/components/CustomerHeader.tsx(19,7): error TS2322: Type '"none"' is not assignable to type '"flat" | "default" | "premium" | "glass"'.
+src/features/tasks/components/CustomerDashboard/components/CustomerHeader.tsx(38,15): error TS2322: Type '"white"' is not assignable to type '"flat" | "default" | "premium" | "glass"'.
+src/features/tasks/components/CustomerDashboard/components/CustomerVehiclesSection.tsx(3,25): error TS2307: Cannot find module '../../../types' or its corresponding type declarations.

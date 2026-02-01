@@ -4,4 +4,4 @@
  * @deprecated This location is deprecated. Import from '@/features/tasks' instead.
  */
 
-export * from "@/features/tasks/services/tasks.service";
+export * from "@/src/features/tasks/services/tasks.service";

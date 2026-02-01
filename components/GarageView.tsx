@@ -1,1 +1,1 @@
-export { default } from "@/features/organizations/components/GarageView";
+export { default } from "@/src/features/organizations/components/GarageView";

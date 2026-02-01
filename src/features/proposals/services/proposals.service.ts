@@ -3,9 +3,9 @@
  * Centralizes all proposal/upsell-related database operations
  */
 
-import { supabase } from "@/services/api/client";
+import { supabase } from "@/lib/supabase";
 import { ProposalStatus, TaskProposal } from "@/types";
-import { ProposalCreationError } from "@/shared/utils/errors";
+import { ProposalCreationError } from "@/src/shared/utils/errors";
 
 // DTOs
 export interface CreateProposalDTO {
@@ -27,7 +27,7 @@ export interface UpdateProposalDTO {
   audio_url?: string | null;
 }
 
-class ProposalsService {
+export class ProposalsService {
   private readonly selectQuery =
     `*, task:tasks(*, vehicle:vehicles(*)), creator:profiles(*)`;
 

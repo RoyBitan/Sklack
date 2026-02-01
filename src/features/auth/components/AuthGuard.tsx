@@ -2,10 +2,10 @@ import React from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import AuthForm from "./AuthForm";
-import Layout from "@/shared/components/layout/Layout";
+import Layout from "@/src/shared/components/layout/Layout";
 import OrganizationView from "@/components/OrganizationView";
 import PendingApprovalView from "./PendingApprovalView";
-import LoadingSpinner from "@/shared/components/ui/LoadingSpinner";
+import LoadingSpinner from "@/src/shared/components/ui/LoadingSpinner";
 import { MembershipStatus } from "@/types";
 
 export const AuthGuard: React.FC = () => {

@@ -1,1 +1,1 @@
-export { default } from "@/features/vehicles/components/AddVehicleModal";
+export { default } from "@/src/features/vehicles/components/AddVehicleModal";
